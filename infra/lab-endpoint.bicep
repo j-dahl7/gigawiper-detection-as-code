@@ -15,6 +15,13 @@ param expirationDate string
 
 var prefix = 'nls-gw-lab'
 
+resource mdeOnboarding 'Microsoft.Security/mdeOnboardings@2021-10-01-preview' existing = {
+  scope: subscription()
+  // The published type schema still narrows this to "default" even though
+  // Microsoft's built-in MDE policy references the supported "Windows" name.
+  name: any('Windows')
+}
+
 resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   name: '${prefix}-nsg'
   location: location
@@ -166,7 +173,14 @@ resource mdeExtension 'Microsoft.Compute/virtualMachines/extensions@2024-07-01' 
     typeHandlerVersion: '1.0'
     autoUpgradeMinorVersion: true
     enableAutomaticUpgrade: true
-    settings: {}
+    settings: {
+      azureResourceId: vm.id
+      vNextEnabled: 'true'
+      installedBy: 'NineLivesLab'
+    }
+    protectedSettings: {
+      defenderForEndpointOnboardingScript: mdeOnboarding.properties.onboardingPackageWindows
+    }
   }
 }
 

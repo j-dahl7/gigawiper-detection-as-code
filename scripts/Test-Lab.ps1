@@ -69,6 +69,13 @@ $infraContent = Get-Content -LiteralPath $infraFile -Raw
 if ($infraContent -notmatch 'securityRules:\s*\[\]') {
     throw 'Disposable endpoint NSG must not contain inbound rules.'
 }
+if ($infraContent -notmatch 'Microsoft\.Security/mdeOnboardings@2021-10-01-preview' -or
+    $infraContent -notmatch 'defenderForEndpointOnboardingScript:\s*mdeOnboarding\.properties\.onboardingPackageWindows') {
+    throw 'MDE must use the subscription onboarding resource instead of a checked-in onboarding package.'
+}
+if ($infraContent -notmatch 'azureResourceId:\s*vm\.id') {
+    throw 'MDE extension settings must bind onboarding to the disposable VM resource ID.'
+}
 
 $telemetryScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Invoke-SafeGigaWiperTelemetry.ps1') -Raw
 $forbidden = @(
@@ -95,6 +102,7 @@ $summary = [pscustomobject]@{
     SafetyChecks = $forbidden.Count
     InfrastructureCompiled = $true
     InboundSecurityRules = 0
+    MdeOnboardingPackage = 'ARM reference; not stored'
     Results = $results
 }
 
