@@ -35,14 +35,6 @@ DeviceProcessEvents
             }
           ]
         }
-        {
-          tactic: 'DefenseEvasion'
-          techniques: [
-            {
-              technique: 'T1112'
-            }
-          ]
-        }
       ]
       entityMappings: {
         hosts: [

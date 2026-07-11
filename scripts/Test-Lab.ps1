@@ -36,6 +36,9 @@ foreach ($file in $files) {
     if ($content -match '(?i)isolateDevice|disableUser|deleteEmail|runAntivirusScan') {
         throw "Automated response action found in $($file.Name); lab rules must alert only by default."
     }
+    if (([regex]::Matches($content, '(?m)^\s*tactic:\s*')).Count -gt 1) {
+        throw "Preview custom detections currently accept one MITRE tactic per rule: $($file.Name)."
+    }
 
     $compileOutput = & az bicep build --file $file.FullName --stdout 2>&1
     if ($LASTEXITCODE -ne 0) {
