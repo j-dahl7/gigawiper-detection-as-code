@@ -10,6 +10,9 @@ param adminPassword string
 
 param location string = resourceGroup().location
 
+@description('ISO date used by cost-control and cleanup automation to identify this disposable lab.')
+param expirationDate string
+
 var prefix = 'nls-gw-lab'
 
 resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
@@ -17,7 +20,7 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   location: location
   tags: {
     Purpose: 'SafeGigaWiperTelemetry'
-    Expiration: '2026-07-12'
+    Expiration: expirationDate
   }
   properties: {
     securityRules: []
@@ -29,7 +32,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
   location: location
   tags: {
     Purpose: 'SafeGigaWiperTelemetry'
-    Expiration: '2026-07-12'
+    Expiration: expirationDate
   }
   properties: {
     addressSpace: {
@@ -59,7 +62,7 @@ resource publicIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = {
   }
   tags: {
     Purpose: 'OutboundOnlyNoInboundRules'
-    Expiration: '2026-07-12'
+    Expiration: expirationDate
   }
   properties: {
     publicIPAllocationMethod: 'Static'
@@ -71,7 +74,7 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-05-01' = {
   location: location
   tags: {
     Purpose: 'SafeGigaWiperTelemetry'
-    Expiration: '2026-07-12'
+    Expiration: expirationDate
   }
   properties: {
     ipConfigurations: [
@@ -96,11 +99,11 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-07-01' = {
   location: location
   tags: {
     Purpose: 'SafeGigaWiperTelemetry'
-    Expiration: '2026-07-12'
+    Expiration: expirationDate
   }
   properties: {
     hardwareProfile: {
-      vmSize: 'Standard_B2s'
+      vmSize: 'Standard_D2s_v4'
     }
     storageProfile: {
       imageReference: {

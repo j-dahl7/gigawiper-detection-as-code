@@ -1,8 +1,9 @@
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$ResourceGroup = 'nls-gigawiper-dac-lab-rg',
-    [string]$Location = 'eastus',
-    [string]$VmName = 'nls-gw-win-lab'
+    [string]$Location = 'centralus',
+    [string]$VmName = 'nls-gw-win-lab',
+    [string]$ExpirationDate = (Get-Date).AddDays(1).ToString('yyyy-MM-dd')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,7 +25,7 @@ if ($PSCmdlet.ShouldProcess($ResourceGroup, 'Create disposable resource group an
         $group = New-AzResourceGroup -Name $ResourceGroup -Location $Location -Tag @{
             Purpose = 'GigaWiperDetectionAsCode'
             Owner = 'NineLives'
-            Expiration = '2026-07-12'
+            Expiration = $ExpirationDate
         }
     }
 
@@ -33,6 +34,8 @@ if ($PSCmdlet.ShouldProcess($ResourceGroup, 'Create disposable resource group an
         -ResourceGroupName $ResourceGroup `
         -TemplateFile (Join-Path (Split-Path -Parent $PSScriptRoot) 'infra\lab-endpoint.bicep') `
         -vmName $VmName `
+        -location $Location `
+        -expirationDate $ExpirationDate `
         -adminPassword $securePassword `
         -Verbose:$false
 
@@ -47,6 +50,6 @@ if ($PSCmdlet.ShouldProcess($ResourceGroup, 'Create disposable resource group an
         ProvisioningState = $deployment.ProvisioningState
         InboundSecurityRules = $deployment.Outputs.inboundSecurityRules.Value
         MdeExtension = 'requested'
-        Expires = '2026-07-12'
+        Expires = $ExpirationDate
     }
 }
