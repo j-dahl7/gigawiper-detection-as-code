@@ -1,0 +1,37 @@
+// Hunt 1: Microsoft-published GigaWiper infrastructure.
+let PublishedInfrastructure = dynamic(["185.182.193.21", "212.8.248.104"]);
+DeviceNetworkEvents
+| where RemoteIP in (PublishedInfrastructure)
+| project Timestamp, DeviceId, DeviceName, RemoteIP, RemotePort, Protocol, InitiatingProcessFileName, InitiatingProcessCommandLine, InitiatingProcessSHA256, ReportId
+
+// Hunt 2: Rare executable-to-destination combinations on observed C2 ports.
+let Lookback = 14d;
+let Recent = 1d;
+let Baseline = DeviceNetworkEvents
+| where Timestamp between (ago(Lookback) .. ago(Recent))
+| summarize BaselineConnections=count() by InitiatingProcessSHA256, RemoteIP, RemotePort;
+DeviceNetworkEvents
+| where Timestamp > ago(Recent)
+| where RemotePort in (5544, 7542)
+| join kind=leftanti Baseline on InitiatingProcessSHA256, RemoteIP, RemotePort
+| project Timestamp, DeviceId, DeviceName, RemoteIP, RemotePort, InitiatingProcessFileName, InitiatingProcessFolderPath, InitiatingProcessCommandLine, InitiatingProcessSHA256, ReportId
+
+// Hunt 3: Direct interaction with Security.evtx.
+DeviceFileEvents
+| where FolderPath endswith @"\Windows\System32\winevt\Logs\Security.evtx"
+| where ActionType in~ ("FileDeleted", "FileRenamed", "FileModified")
+| project Timestamp, DeviceId, DeviceName, ActionType, FolderPath, InitiatingProcessFileName, InitiatingProcessCommandLine, InitiatingProcessSHA256, ReportId
+
+// Hunt 4: Firewall-rule creation masquerading as Windows Cloud Experience Host.
+DeviceProcessEvents
+| where FileName in~ ("powershell.exe", "pwsh.exe", "netsh.exe")
+| where ProcessCommandLine has "CloudExperienceHost"
+| where ProcessCommandLine has_any ("New-NetFirewallRule", "advfirewall", "-Direction Inbound", "-Direction Outbound")
+| project Timestamp, DeviceId, DeviceName, FileName, FolderPath, ProcessCommandLine, AccountName, InitiatingProcessFileName, SHA256, ReportId
+
+// Hunt 5: Screen capture or recording under an unusual ProgramData output path.
+DeviceFileEvents
+| where FolderPath startswith @"C:\ProgramData\output"
+| where FileName endswith ".png" or FileName endswith ".mp4"
+| summarize Files=count(), FirstSeen=min(Timestamp), LastSeen=max(Timestamp), SampleFiles=make_set(FileName, 20), arg_max(Timestamp, ReportId, DeviceName, InitiatingProcessFileName, InitiatingProcessCommandLine) by DeviceId
+| project Timestamp, DeviceId, ReportId, DeviceName, Files, FirstSeen, LastSeen, SampleFiles, InitiatingProcessFileName, InitiatingProcessCommandLine

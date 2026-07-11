@@ -1,0 +1,78 @@
+[CmdletBinding(SupportsShouldProcess)]
+param(
+    [switch]$CleanupOnly
+)
+
+$ErrorActionPreference = 'Stop'
+$labRoot = Join-Path $env:ProgramData 'NLS-GigaWiper-Lab'
+$decoyRoot = Join-Path $labRoot 'decoys'
+$registryPath = 'HKCU:\SOFTWARE\OneDrive\Environment'
+$taskName = 'OneDrive Update'
+$eventLogName = 'NLS-GigaWiper-Lab'
+$eventSource = 'NLS-GigaWiper-SafeTelemetry'
+
+function Remove-LabArtifacts {
+    schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+    if (Test-Path -LiteralPath $registryPath) {
+        Remove-Item -LiteralPath $registryPath -Recurse -Force
+    }
+    if ([System.Diagnostics.EventLog]::SourceExists($eventSource)) {
+        Remove-EventLog -Source $eventSource
+    }
+    if (Test-Path -LiteralPath $labRoot) {
+        Remove-Item -LiteralPath $labRoot -Recurse -Force
+    }
+}
+
+if ($CleanupOnly) {
+    if ($PSCmdlet.ShouldProcess('exact NLS GigaWiper lab artifacts', 'Remove')) {
+        Remove-LabArtifacts
+    }
+    [pscustomobject]@{ Safe=$true; Operation='cleanup'; LabRoot=$labRoot; Completed=(Get-Date).ToUniversalTime() }
+    return
+}
+
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = [Security.Principal.WindowsPrincipal]::new($identity)
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'Run this script from an elevated PowerShell session on a disposable lab endpoint.'
+}
+
+if ($PSCmdlet.ShouldProcess($labRoot, 'Generate bounded benign telemetry')) {
+    New-Item -ItemType Directory -Path $decoyRoot -Force | Out-Null
+
+    New-Item -Path $registryPath -Force | Out-Null
+    New-ItemProperty -Path $registryPath -Name 'NLSLabMarker' -Value 'SAFE-TELEMETRY-ONLY' -PropertyType String -Force | Out-Null
+
+    $startTime = (Get-Date).AddMinutes(10).ToString('HH:mm')
+    schtasks.exe /Create /TN $taskName /TR 'cmd.exe /c exit 0' /SC ONCE /ST $startTime /F | Out-Null
+
+    if (-not [System.Diagnostics.EventLog]::SourceExists($eventSource)) {
+        New-EventLog -LogName $eventLogName -Source $eventSource
+    }
+    Write-EventLog -LogName $eventLogName -Source $eventSource -EventId 1001 -EntryType Information -Message 'Nine Lives safe telemetry marker. This custom lab log will be cleared.'
+    wevtutil.exe cl $eventLogName
+
+    $mcPath = Join-Path $labRoot 'mc.exe'
+    Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32\cmd.exe') -Destination $mcPath -Force
+    & $mcPath /c 'echo NLS safe MinIO mirror simulation - no transfer performed' | Out-Null
+
+    1..8 | ForEach-Object {
+        $source = Join-Path $decoyRoot ("decoy-{0:D2}.txt" -f $_)
+        Set-Content -LiteralPath $source -Value "NLS harmless decoy $_" -Encoding utf8
+        Rename-Item -LiteralPath $source -NewName ([IO.Path]::GetFileNameWithoutExtension($source) + '.candy')
+    }
+}
+
+[pscustomobject]@{
+    Safe = $true
+    Operation = 'generate'
+    ScheduledTask = $taskName
+    RegistryPath = $registryPath
+    ClearedLog = $eventLogName
+    DecoyFiles = 8
+    RealEncryption = $false
+    BootOrRecoveryChanges = $false
+    NetworkTransfer = $false
+    Completed = (Get-Date).ToUniversalTime()
+}

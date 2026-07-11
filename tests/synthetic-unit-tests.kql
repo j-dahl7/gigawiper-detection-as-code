@@ -1,0 +1,30 @@
+// Synthetic-only KQL fixtures. These rows are not endpoint events and must not
+// be presented as genuine Defender alerts.
+
+let ProcessEvents = datatable(Timestamp:datetime, DeviceId:string, ReportId:long, DeviceName:string, FileName:string, ProcessCommandLine:string)
+[
+    datetime(2026-07-11T12:00:00Z), "device-lab-01", 1001, "nls-win-lab", "schtasks.exe", "schtasks.exe /Create /TN \"OneDrive Update\" /TR \"cmd.exe /c exit 0\" /SC ONCE /ST 12:10 /F",
+    datetime(2026-07-11T12:05:00Z), "device-lab-01", 1002, "nls-win-lab", "wevtutil.exe", "wevtutil.exe cl Security",
+    datetime(2026-07-11T12:10:00Z), "device-lab-01", 1003, "nls-win-lab", "reagentc.exe", "reagentc.exe /disable",
+    datetime(2026-07-11T12:15:00Z), "device-lab-01", 1004, "nls-win-lab", "mc.exe", "mc.exe mirror C:\\Sensitive alias/bucket"
+];
+let RegistryEvents = datatable(DeviceId:string, RegistryTimestamp:datetime, RegistryKey:string, RegistryValueName:string, RegistryValueData:string)
+[
+    "device-lab-01", datetime(2026-07-11T12:02:00Z), @"HKEY_CURRENT_USER\SOFTWARE\OneDrive\Environment", "NLSLabMarker", "SAFE-TELEMETRY-ONLY"
+];
+let PersistenceResult = ProcessEvents
+| where FileName =~ "schtasks.exe" and ProcessCommandLine has "OneDrive Update"
+| join kind=innerunique RegistryEvents on DeviceId
+| where abs(datetime_diff('minute', RegistryTimestamp, Timestamp)) <= 15
+| project Test="PersistenceCorrelation", Passed=true, Timestamp, DeviceId, ReportId;
+let LogClearResult = ProcessEvents
+| where FileName =~ "wevtutil.exe" and ProcessCommandLine has " cl "
+| project Test="EventLogDestruction", Passed=true, Timestamp, DeviceId, ReportId;
+let RecoveryResult = ProcessEvents
+| where FileName =~ "reagentc.exe" and ProcessCommandLine has "/disable"
+| project Test="RecoveryTampering", Passed=true, Timestamp, DeviceId, ReportId;
+let MinioResult = ProcessEvents
+| where FileName =~ "mc.exe" and ProcessCommandLine has " mirror "
+| project Test="MinIOStaging", Passed=true, Timestamp, DeviceId, ReportId;
+union PersistenceResult, LogClearResult, RecoveryResult, MinioResult
+| order by Test asc
