@@ -11,19 +11,21 @@ This file separates observed evidence from planned or synthetic validation.
 | Preview accepts one tactic per rule | Graph API rejected a two-tactic rule with `Only one tactic is currently supported` | Observed; CI guard added | 2026-07-11 |
 | Rule engine accepts corrected pack | Graph API create/read/delete round trip, then live validation deployment | Passed: five enabled rules, one disabled canary, zero response actions | 2026-07-11 |
 | Native Sentinel Repository connection | Source Controls API plus generated OIDC workflow and repository commits | Connected to `main` with `CustomDetection`; Defender portal shows the correct content type | 2026-07-11 |
-| Native Sentinel Repository synchronization | Generated GitHub workflow run `29178665606`, three attempts | Observed preview failure: all six exact templates returned `InvalidTemplateDeployment` / inner `ProviderError`; the portal status remained stale at `In progress` | 2026-07-11 |
+| Native Sentinel Repository synchronization | Generated GitHub workflow runs `29178665606` and `29180501340` | Observed preview failure: the latest run again returned `InvalidTemplateDeployment` / inner `ProviderError` for all six exact templates; the Repository connection now visibly reports `Failed` | 2026-07-12 |
 | Repository identity authorization | Token-safe diagnostic using the connection identity | Passed: app-only token contained `CustomDetection.ReadWrite.All`, exact Graph GET returned 200, and Azure deployment rights were present | 2026-07-11 |
 | Provider-versus-Graph isolation | Same connection identity, same rule ID | Provider validation failed internally while direct Graph authorization succeeded; current Microsoft documentation lists no additional app-only role | 2026-07-11 |
 | Broad-role diagnostic | Temporary Azure Security Admin at the exact resource-group scope | Did not change the failure after a fresh login and full propagation interval; assignment removed | 2026-07-11 |
-| Dedicated Graph fallback identity | Entra app, GitHub OIDC credential, Graph app-role assignment, Azure RBAC audit | Passed configuration: only `CustomDetection.ReadWrite.All`, environment-scoped OIDC, and zero Azure role assignments | 2026-07-11 |
-| Graph fallback workflow | Manual `main`-only workflow and exact-ID upsert script | Implemented; live canary/all workflow evidence pending | 2026-07-11 |
-| Five rules enabled and canary disabled | Microsoft Graph custom-detection API | Passed for validation deployment; Repository ownership remains pending | 2026-07-11 |
+| Graph fallback canary | Manual workflow run `29180371449` | Passed: exact canary ID updated/read back, disabled, with zero response actions | 2026-07-12 |
+| Graph fallback full pack | Manual workflow run `29180593038` | Passed: all six exact IDs updated/read back; canary disabled, five behavior rules enabled, and zero response actions on every rule | 2026-07-12 |
+| Dedicated Graph fallback identity | Entra app-role and Azure RBAC audits plus GitHub OIDC configuration | Passed: only Graph application permission `CustomDetection.ReadWrite.All`, environment-scoped federated OIDC, no stored client secret, and zero Azure role assignments | 2026-07-12 |
+| Deployment-path sequencing | GitHub Actions run order and completion timestamps | Passed: canary run `29180371449` completed, native retry `29180501340` then completed in `Failed`, and full-pack run `29180593038` began afterward; native and fallback paths were never concurrent | 2026-07-12 |
+| Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six current rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
 | Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default inbound deny with no custom inbound NSG rules | 2026-07-11 |
 | Safe endpoint jobs executed | Azure managed Run Command instance views | Passed: task/registry, custom-log clear, filename-only `mc.exe`, and eight decoy renames all exited 0 | 2026-07-11 |
 | Live KQL validation | Defender XDR Advanced Hunting using the exact checked-in queries | Passed for NLS-GW-001, NLS-GW-003, NLS-GW-004, and NLS-GW-005 against real benign events | 2026-07-11 |
 | `.candy` rename collection | Three bounded decoy runs on Windows Server 2022 | Passed after ingestion delay: seven `FileRenamed` rows surfaced from the Public Documents copy-plus-move variant and satisfied the five-in-five-minutes threshold | 2026-07-11 |
 | Synthetic query fixtures | Live Advanced Hunting execution of `tests/synthetic-unit-tests.kql` | Passed: five named test rows, including recovery tampering and `.candy` aggregation | 2026-07-11 |
-| Safe activity produced a custom-rule alert | Defender XDR | Pending: all five enabled rules advanced their hourly `lastRunDateTime`, but no NLS-GW alert was visible after the first completed evaluation | 2026-07-11 |
+| Safe activity produced a custom-rule alert | Defender XDR | Pending: no custom `NLS-GW` alert is claimed; query matches and successful rule deployment are separate evidence levels | 2026-07-12 |
 | Safe filename emulator produced built-in coverage | Defender for Endpoint alert API | Passed: `System executable renamed and launched`; recorded separately and not presented as a GigaWiper or custom-rule alert | 2026-07-11 |
 | Destructive behavior executed | Prohibited | Not performed |
 | Built-in Microsoft GigaWiper alert reproduced | Requires malware; outside lab boundary | Not claimed |
@@ -51,12 +53,14 @@ an identity with Microsoft Sentinel Contributor plus the documented Graph
 application permission `CustomDetection.ReadWrite.All`. A token-safe diagnostic
 confirmed that the exact identity could call the custom-detection Graph API.
 
-Despite that, three native workflow attempts failed all six resources during
-provider validation with `InvalidTemplateDeployment` and an inner
-`ProviderError: Encountered internal server error`. Direct deployment of the
-same compiled Bicep succeeded under the delegated user path, and a direct Graph
-GET retrieved the disabled canary by stable ID. Reproducing with Bicep CLI
-`v0.45.6` excluded the runner's older compiler as the cause.
+Despite that, native workflow run `29178665606` failed all six resources during
+three provider-validation attempts, and the later run `29180501340` again failed
+all six with `InvalidTemplateDeployment` and an inner `ProviderError:
+Encountered internal server error`. The Repository connection now visibly
+reports **Failed**. Direct deployment of the same compiled Bicep succeeded under
+the delegated user path, and a direct Graph GET retrieved the disabled canary
+by stable ID. Reproducing with Bicep CLI `v0.45.6` excluded the runner's older
+compiler as the cause.
 
 A temporary Azure Security Admin assignment was used only to falsify the
 missing-Azure-role hypothesis. It did not change the result after propagation
@@ -70,6 +74,18 @@ assignments. Its workflow is manual, restricted to `main`, compiles the same
 Bicep source, creates or updates only the six stable IDs, performs no deletion,
 and verifies each rule by exact ID. Native Repository synchronization and the
 fallback must not run concurrently.
+
+Canary workflow run `29180371449` succeeded first. Full-pack workflow run
+`29180593038` then updated and read back all six exact IDs: the canary remained
+disabled, all five behavior rules were enabled, and every rule had zero response
+actions. The dedicated identity used only the Microsoft Graph application
+permission `CustomDetection.ReadWrite.All` through environment-scoped GitHub
+OIDC and had zero Azure RBAC assignments. Because the Repository path failed,
+it does not own these Graph-created or Graph-updated rules.
+
+Successful deployment is not evidence of a custom alert. The safe telemetry
+produced live query matches for four behavior rules, but a custom `NLS-GW` alert
+remains pending and is not claimed.
 
 ## Endpoint activation finding
 

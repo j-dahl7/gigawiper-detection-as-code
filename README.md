@@ -16,8 +16,8 @@ fallback when the provider fails.
 |---|---|
 | Source control | Stable rule IDs, CODEOWNERS, pull-request validation, and Git history |
 | Bicep | Six templates compile with the Microsoft Security extension `v1.0.1` |
-| Deployment | Native Repository sync is the intended path; direct Bicep and a manual Graph upsert are bounded preview fallbacks |
-| Detection | Five behavior-oriented rules over Defender XDR endpoint tables |
+| Deployment | Native Repository sync was exercised and failed in the preview provider; the manual Graph upsert succeeded as a bounded fallback |
+| Detection | Five enabled behavior-oriented rules plus one disabled deployment canary over Defender XDR endpoint tables |
 | Safe testing | Benign task/registry activity, a custom lab log clear, a filename-only MinIO simulation, and decoy `.candy` renames |
 | Destructive testing | Synthetic KQL fixtures only |
 
@@ -32,38 +32,47 @@ GitHub Actions: Bicep compile + ID/query/safety checks
     v
 Merge to main
     |
-    v
-Microsoft Sentinel Repository synchronization (Preview)
-    | success                         | provider failure
-    v                                 v
-Defender XDR rules          Manual, protected Graph fallback
-                                      |
-                                      v
-                            Exact-ID create/update + read-back
+    +--> Native Sentinel Repository sync (Preview)
+    |        |
+    |        +--> FAILED: provider error before Repository ownership
     |
-    +--> safe endpoint telemetry
-    +--> alerts and incident correlation
+    +--> Manual Graph fallback (only while native sync is idle)
+             |
+             v
+         GitHub OIDC --> exact-ID create/update + read-back
+             |
+             v
+         Defender XDR: five enabled rules + disabled canary
+             |
+             +--> safe endpoint telemetry
+             +--> custom alert validation (pending)
 ```
 
 The ordinary pull-request workflow validates content but does not deploy it.
-Microsoft Sentinel Repositories remains the intended owner after merge. The
-Graph workflow is manual-only, restricted to `main`, requires an exact
-confirmation string, and exists solely because the July 2026 preview provider
-failed in this tenant. Never run the native and fallback deployment paths at
-the same time.
+Native Sentinel Repository synchronization is the preferred path to retest
+after Microsoft corrects the preview provider, but it failed here and does not
+own the six rules created or updated by the Graph fallback. The Graph workflow
+is manual-only, restricted to `main`, requires an exact confirmation string,
+and exists solely because the July 2026 preview provider failed in this tenant.
+The validated runs were serialized: the canary fallback completed, the latest
+native retry then completed in **Failed**, and the full-pack fallback began only
+after that retry ended. The paths were never concurrent. Keep that separation
+when retesting: never run the native and fallback deployment paths at the same
+time.
 
 ## Detection pack
 
-| ID | Rule | Design | Stage |
-|---|---|---|---|
-| `nls-gw-001-onedrive-persistence` | OneDrive-lookalike task plus registry activity | Multi-table scheduled correlation | Persistence |
-| `nls-gw-002-recovery-boot-tampering` | Recovery and boot command patterns | Single-table scheduled rule | Destructive preparation |
-| `nls-gw-003-event-log-destruction` | `wevtutil` log clearing | Single-table scheduled rule | Defense evasion |
-| `nls-gw-004-minio-transfer-staging` | Unusual `mc.exe` transfer arguments | Single-table scheduled rule | Exfiltration staging |
-| `nls-gw-005-candy-rename-burst` | Burst of `.candy` file renames | Single-table aggregation | Impact confirmation |
+| ID | Rule | Design | Stage | Validated status |
+|---|---|---|---|---|
+| `nls-gw-000-canary` | Impossible-match deployment canary | Single-table scheduled rule | Deployment validation | Disabled |
+| `nls-gw-001-onedrive-persistence` | OneDrive-lookalike task plus registry activity | Multi-table scheduled correlation | Persistence | Enabled |
+| `nls-gw-002-recovery-boot-tampering` | Recovery and boot command patterns | Single-table scheduled rule | Destructive preparation | Enabled |
+| `nls-gw-003-event-log-destruction` | `wevtutil` log clearing | Single-table scheduled rule | Defense evasion | Enabled |
+| `nls-gw-004-minio-transfer-staging` | Unusual `mc.exe` transfer arguments | Single-table scheduled rule | Exfiltration staging | Enabled |
+| `nls-gw-005-candy-rename-burst` | Burst of `.candy` file renames | Single-table aggregation | Impact confirmation | Enabled |
 
-`NLS-GW-000` is a disabled deployment canary. It cannot match ordinary tenant
-activity and is excluded from production screenshots unless explicitly needed.
+All six exact IDs were read back after the successful fallback deployment.
+Every rule had zero automated response actions; the canary remained disabled.
 
 ## Prerequisites
 
@@ -87,7 +96,7 @@ The capability is preview. This repository was built against:
 
 | Component | Version/date |
 |---|---|
-| Documentation validation date | 2026-07-11 |
+| Documentation and live validation dates | 2026-07-11 through 2026-07-12 |
 | Resource API | `2026-06-01-preview` |
 | Microsoft Security Bicep extension | `v1.0.1` |
 | Portal | Microsoft Defender portal |
@@ -112,7 +121,7 @@ The disposable endpoint template obtains the MDE onboarding payload at deploy
 time from `Microsoft.Security/mdeOnboardings/Windows`. The protected payload is
 never written to the repository, test output, or deployment outputs.
 
-## Deploy with Sentinel Repositories
+## Test the native Sentinel Repositories path
 
 1. Fork or clone this repository into a GitHub repository you control.
 2. In the Microsoft Defender portal, open **Microsoft Sentinel** > **Content
@@ -120,12 +129,17 @@ never written to the repository, test output, or deployment outputs.
 3. Create or edit the Repository connection.
 4. Select **Custom Detection Rules** as a content type.
 5. Point the connection at this repository and merge a validated pull request.
-6. Confirm the rules under **Hunting** > **Custom detection rules**.
+6. Inspect the synchronization result before confirming rules under **Hunting**
+   > **Custom detection rules**.
 
-Repository synchronization is authoritative. Portal changes to managed content
-can be overwritten by the next synchronization.
+In this validation, the native path stopped at provider validation and the
+Repository status became visibly **Failed**. It did not create or take ownership
+of the six rules later created or updated through Microsoft Graph. If a future
+native synchronization succeeds, treat only content actually deployed by that
+connection as Repository-managed; portal changes to such managed content can be
+overwritten by a later synchronization.
 
-### Preview provider finding — validated July 11, 2026
+### Preview provider finding — validated July 11-12, 2026
 
 The connection-created identity held Microsoft Sentinel Contributor and the
 documented Microsoft Graph application permission
@@ -135,6 +149,10 @@ stable ID, but native Repository validation returned
 templates. The same Bicep and extension succeeded through a delegated direct
 deployment. Installing current Bicep CLI `v0.45.6` did not change the native
 result.
+
+The latest native workflow run, `29180501340`, again failed all six resources,
+and the Repository connection surfaced the final **Failed** state. This is the
+native-path evidence; it is separate from the successful manual fallback runs.
 
 Adding Azure **Security Admin** did not fix the provider after a fresh login
 and a full propagation interval, so that diagnostic assignment was removed.
@@ -149,6 +167,13 @@ properties, and performs an exact-ID GET followed by POST or PATCH through the
 official Microsoft Graph beta custom-detection API. It then reads each stable
 ID back and verifies the desired status, schedule, KQL, alert metadata, MITRE
 mapping, host mapping, and absence of response actions.
+
+Live validation completed in two manual runs: canary run `29180371449` passed,
+then full-pack run `29180593038` updated and read back all six exact IDs. The
+canary was disabled, the five behavior rules were enabled, and all six rules
+had zero automated response actions. These are Graph-created or Graph-updated
+rules; the failed Repository connection does not own them. A custom `NLS-GW`
+alert from the safe telemetry remains pending and is not claimed.
 
 The included GitHub workflow uses:
 
@@ -241,7 +266,7 @@ Cleanup is exact-scope:
 
 | Level | Meaning |
 |---|---|
-| Live deployment | Rule compiled, synchronized/deployed, and appeared in Defender XDR |
+| Live deployment | Rule compiled, was deployed by the explicitly named path, and appeared in Defender XDR |
 | Real benign telemetry | The endpoint performed the bounded action and Defender collected it |
 | Synthetic query test | `datatable()` fixtures validate logic without performing the action |
 | Query guidance only | Useful hunt not claimed as a deployed alert |
@@ -253,9 +278,10 @@ Microsoft-generated alert.
 ## Cleanup
 
 1. Run the telemetry cleanup command above.
-2. Remove the Repository connection or deselect Custom Detection Rules if the
-   repository should no longer own the rules.
-3. Delete the five `NLS-GW-*` rules from Defender XDR, or use an appropriately
+2. Remove the Repository connection or deselect Custom Detection Rules if it
+   should no longer attempt native synchronization. This does not remove or
+   transfer ownership of rules created through the Graph fallback.
+3. Delete the six `NLS-GW-*` rules from Defender XDR, or use an appropriately
    authorized Microsoft Graph cleanup workflow with
    `CustomDetection.ReadWrite.All`.
 4. Delete only the disposable Azure resource group created for endpoint testing.
