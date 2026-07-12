@@ -45,7 +45,8 @@ Merge to main
          Defender XDR: five enabled rules + disabled canary
              |
              +--> safe endpoint telemetry
-             +--> custom alert validation (pending)
+             +--> hourly scheduler runs observed
+             +--> Graph-rule alert attribution not established
 ```
 
 The ordinary pull-request workflow validates content but does not deploy it.
@@ -175,6 +176,15 @@ had zero automated response actions. These are Graph-created or Graph-updated
 rules; the failed Repository connection does not own them. No custom alert is
 attributed to those Graph-fallback objects.
 
+Read-only inspection workflow run `29193356536` then retrieved the six stable
+Graph IDs without changing them. The five enabled behavior rules each reported
+frequency `PT1H`, `lastRunDateTime` `12:04:27Z`, and `nextRunDateTime`
+`13:04:27Z`; the disabled canary remained disabled. The current
+`automatedActions` collection and the deprecated `responseActions` collection
+were both empty for every rule. The last-run status and error fields were also
+empty. This establishes Graph scheduler metadata and execution timing, but it
+does not attribute a particular alert or incident to a Graph-fallback rule.
+
 The unified Defender custom-detection page did not surface the six `NLS-GW`
 objects during the July 12 validation window even though exact-ID Graph
 read-back succeeded. An exact `NLS-GW` search returned **0 items** and **No data
@@ -235,9 +245,12 @@ it into incident `628`. Defender displayed first activity as
 local-time display; the last activity is the safe post-creation marker.
 
 This proves the exact query, real endpoint telemetry, Continuous (NRT)
-scheduling, alert creation, and incident correlation. It does **not** prove that
-the native Repository objects or the Graph-fallback objects executed. The live
-portal screenshots are stored with the companion blog draft.
+scheduling, alert creation, and incident correlation for the separate
+portal-native canary. It does **not** attribute that alert or incident to the
+native Repository path or any Graph-fallback object. The later read-only Graph
+inspection independently established hourly scheduler execution timing for the
+five enabled fallback rules. The live portal screenshots are stored with the
+companion blog draft.
 
 ## Direct Bicep alternative
 
@@ -318,10 +331,12 @@ Microsoft-generated alert.
 2. Remove the Repository connection or deselect Custom Detection Rules if it
    should no longer attempt native synchronization. This does not remove or
    transfer ownership of rules created through the Graph fallback.
-3. Delete the six `NLS-GW-*` rules from Defender XDR, or use an appropriately
-   authorized Microsoft Graph cleanup workflow with
-   `CustomDetection.ReadWrite.All`.
-4. Delete only the disposable Azure resource group created for endpoint testing.
+3. Delete the six stable Graph-fallback IDs declared in `detections/*.bicep`
+   from Defender XDR, or use an appropriately authorized Microsoft Graph
+   cleanup workflow with `CustomDetection.ReadWrite.All`.
+4. Separately delete the portal-native `NLS-GW-LIVE-004` canary. It is not one
+   of the six Graph-fallback IDs.
+5. Delete only the disposable Azure resource group created for endpoint testing.
 
 Never use complete-mode resource-group deployment as a cleanup shortcut.
 

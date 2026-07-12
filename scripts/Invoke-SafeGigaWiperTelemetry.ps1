@@ -19,7 +19,10 @@ $eventSource = 'NLS-GigaWiper-SafeTelemetry'
 function Remove-LabArtifacts {
     schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
     reg.exe DELETE $registryNativePath /F 2>$null | Out-Null
-    if ([System.Diagnostics.EventLog]::SourceExists($eventSource)) {
+    if ([System.Diagnostics.EventLog]::Exists($eventLogName)) {
+        Remove-EventLog -LogName $eventLogName
+    }
+    elseif ([System.Diagnostics.EventLog]::SourceExists($eventSource)) {
         Remove-EventLog -Source $eventSource
     }
     if (Test-Path -LiteralPath $labRoot) {

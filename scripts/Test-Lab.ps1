@@ -97,6 +97,9 @@ foreach ($value in $forbidden) {
         throw "Forbidden destructive string found in safe telemetry script: $value"
     }
 }
+if ($telemetryScript -notmatch 'Remove-EventLog\s+-LogName\s+\$eventLogName') {
+    throw 'Cleanup must remove the exact custom NLS-GigaWiper-Lab event log, not only its source.'
+}
 
 $syntheticFile = Join-Path $root 'tests\synthetic-unit-tests.kql'
 $syntheticContent = Get-Content -LiteralPath $syntheticFile -Raw
@@ -157,6 +160,9 @@ $fallbackContracts = [ordered]@{
     'inspection counts all response actions' = $graphFallback -match 'responseActions' -and
         $graphFallback -match 'automatedActions\.PSObject\.Properties' -and
         $graphFallback -match "property\.Name -notlike '@\*'"
+    'inspection timestamps are UTC ISO 8601' = $graphFallback -match 'ConvertTo-UtcIsoTimestamp' -and
+        $graphFallback -match "ToUniversalTime\(\)\.ToString\(" -and
+        $graphFallback -match "'o'"
 }
 foreach ($contract in $fallbackContracts.GetEnumerator()) {
     if (-not $contract.Value) {

@@ -198,6 +198,27 @@ function Get-DetectionResponseActionCount {
     return $count
 }
 
+function ConvertTo-UtcIsoTimestamp {
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+        return ''
+    }
+
+    try {
+        return ([DateTimeOffset]$Value).ToUniversalTime().ToString(
+            'o',
+            [Globalization.CultureInfo]::InvariantCulture
+        )
+    }
+    catch {
+        throw 'Microsoft Graph returned an invalid scheduler timestamp.'
+    }
+}
+
 function New-DetectionInspection {
     param(
         [Parameter(Mandatory)]
@@ -209,9 +230,9 @@ function New-DetectionInspection {
         Id = [string]$Rule.id
         Status = [string]$Rule.status
         Frequency = [string]$Rule.schedule.frequency
-        NextRunDateTime = [string]$Rule.schedule.nextRunDateTime
+        NextRunDateTime = ConvertTo-UtcIsoTimestamp -Value $Rule.schedule.nextRunDateTime
         LastRunStatus = [string]$Rule.lastRunDetails.status
-        LastRunDateTime = [string]$Rule.lastRunDetails.lastRunDateTime
+        LastRunDateTime = ConvertTo-UtcIsoTimestamp -Value $Rule.lastRunDetails.lastRunDateTime
         LastRunErrorCode = [string]$Rule.lastRunDetails.errorCode
         LastRunFailureReason = $failureReason
         ResponseActionCount = Get-DetectionResponseActionCount -DetectionAction $Rule.detectionAction
