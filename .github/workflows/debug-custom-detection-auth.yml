@@ -78,3 +78,76 @@ jobs:
             --name debug-custom-detection-auth `
             --only-show-errors `
             -o json
+
+      - name: Bootstrap the disabled canary through Graph
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $graphToken = az account get-access-token --resource-type ms-graph --query accessToken -o tsv
+          if (-not $graphToken) {
+            throw 'Microsoft Graph token acquisition returned no token.'
+          }
+
+          $body = @{
+            '@odata.type' = '#microsoft.graph.security.detectionRule'
+            id = 'nls-gw-000-canary'
+            displayName = 'NLS-GW-000 - Detection as Code Canary'
+            description = 'Disabled deployment canary for the Nine Lives detection-as-code lab.'
+            status = 'disabled'
+            queryCondition = @{
+              queryText = 'DeviceProcessEvents | where FileName =~ "nls-gigawiper-canary.exe" | project Timestamp, DeviceId, ReportId, DeviceName, FileName, FolderPath, ProcessCommandLine'
+            }
+            schedule = @{
+              frequency = 'PT1H'
+            }
+            detectionAction = @{
+              alertTemplate = @{
+                title = 'NLS canary process observed on {{DeviceName}}'
+                description = 'Disabled deployment canary for the Nine Lives detection-as-code lab. It has no automated response action.'
+                severity = 'low'
+                tactics = @(
+                  @{
+                    tactic = 'Execution'
+                    techniques = @(
+                      @{ technique = 'T1059' }
+                    )
+                  }
+                )
+                entityMappings = @{
+                  hosts = @(
+                    @{ deviceIdColumn = 'DeviceId' }
+                  )
+                }
+              }
+            }
+          } | ConvertTo-Json -Depth 20 -Compress
+
+          $responsePath = Join-Path $env:RUNNER_TEMP 'canary-create-response.json'
+          $status = $body | curl.exe -4 -sS -o $responsePath -w '%{http_code}' `
+            -X POST `
+            -H "Authorization: Bearer $graphToken" `
+            -H 'Content-Type: application/json' `
+            --data-binary '@-' `
+            'https://graph.microsoft.com/beta/security/rules/detectionRules'
+          $response = Get-Content -Raw $responsePath | ConvertFrom-Json
+
+          if ($status -eq '201') {
+            [pscustomobject]@{
+              graphStatus = $status
+              id = $response.id
+              displayName = $response.displayName
+              status = $response.status
+            } | ConvertTo-Json
+          }
+          elseif ($status -eq '409') {
+            Write-Host 'The disabled canary already exists; no duplicate was created.'
+          }
+          else {
+            [pscustomobject]@{
+              graphStatus = $status
+              errorCode = $response.error.code
+              errorMessage = $response.error.message
+              requestId = $response.error.innerError.'request-id'
+            } | ConvertTo-Json -Depth 5
+            throw "Graph canary creation failed with HTTP $status."
+          }
