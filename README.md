@@ -67,6 +67,7 @@ activity and is excluded from production screenshots unless explicitly needed.
 - Owner on the resource group containing the connected Sentinel workspace.
 - GitHub Actions enabled for Repository smart deployments.
 - Azure CLI and Bicep for local validation or the direct deployment path.
+- `Az.Accounts` and `Az.Resources` if you use the endpoint deployment helper.
 - A disposable Windows endpoint onboarded to Microsoft Defender for Endpoint
   for live benign telemetry validation.
 
@@ -129,6 +130,32 @@ Do not run direct Bicep deployment and Repository synchronization against the
 same rule IDs at the same time.
 
 ## Generate safe telemetry
+
+Create the isolated endpoint if you do not already have a disposable,
+MDE-onboarded Windows test device:
+
+```powershell
+Connect-AzAccount
+./scripts/New-LabEndpoint.ps1 `
+  -ResourceGroup nls-gigawiper-dac-lab-rg `
+  -VmName nls-gw-win-lab
+```
+
+The template creates no custom inbound NSG rules. Use Azure Run Command instead
+of opening RDP if you want to invoke the harness remotely:
+
+```powershell
+$safeScript = Get-Content -Raw ./scripts/Invoke-SafeGigaWiperTelemetry.ps1
+az vm run-command invoke `
+  --resource-group nls-gigawiper-dac-lab-rg `
+  --name nls-gw-win-lab `
+  --command-id RunPowerShellScript `
+  --scripts $safeScript
+```
+
+Wait until the Defender machine API reports the endpoint `Onboarded` and
+`Active`, and confirm `DeviceInfo` exists in Advanced Hunting, before running
+the bounded telemetry.
 
 ```powershell
 ./scripts/Invoke-SafeGigaWiperTelemetry.ps1
