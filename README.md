@@ -1,8 +1,9 @@
 # GigaWiper Detection as Code Lab
 
 Turn Microsoft's GigaWiper threat research into reviewable Microsoft Defender
-XDR custom detections, validate them without malware, and deploy them through
-the new Microsoft Sentinel Repositories custom-detection path.
+XDR custom detections, validate them without malware, and exercise the new
+Microsoft Sentinel Repositories custom-detection path with an honest preview
+fallback when the provider fails.
 
 > **Safety boundary:** This lab never downloads or executes GigaWiper. It does
 > not wipe disks, encrypt files, delete boot files, disable recovery, or clear
@@ -15,7 +16,7 @@ the new Microsoft Sentinel Repositories custom-detection path.
 |---|---|
 | Source control | Stable rule IDs, CODEOWNERS, pull-request validation, and Git history |
 | Bicep | Six templates compile with the Microsoft Security extension `v1.0.1` |
-| Deployment | Native Repository sync is the production path; direct Bicep is an explicit alternative |
+| Deployment | Native Repository sync is the intended path; direct Bicep and a manual Graph upsert are bounded preview fallbacks |
 | Detection | Five behavior-oriented rules over Defender XDR endpoint tables |
 | Safe testing | Benign task/registry activity, a custom lab log clear, a filename-only MinIO simulation, and decoy `.candy` renames |
 | Destructive testing | Synthetic KQL fixtures only |
@@ -33,17 +34,23 @@ Merge to main
     |
     v
 Microsoft Sentinel Repository synchronization (Preview)
-    |
-    v
-Microsoft Defender XDR custom detection rules
+    | success                         | provider failure
+    v                                 v
+Defender XDR rules          Manual, protected Graph fallback
+                                      |
+                                      v
+                            Exact-ID create/update + read-back
     |
     +--> safe endpoint telemetry
     +--> alerts and incident correlation
 ```
 
-GitHub Actions validates content but does not deploy it. Microsoft Sentinel
-Repositories remains the single production deployment path after merge. This
-avoids competing deployment systems and duplicate ownership.
+The ordinary pull-request workflow validates content but does not deploy it.
+Microsoft Sentinel Repositories remains the intended owner after merge. The
+Graph workflow is manual-only, restricted to `main`, requires an exact
+confirmation string, and exists solely because the July 2026 preview provider
+failed in this tenant. Never run the native and fallback deployment paths at
+the same time.
 
 ## Detection pack
 
@@ -117,6 +124,58 @@ never written to the repository, test output, or deployment outputs.
 
 Repository synchronization is authoritative. Portal changes to managed content
 can be overwritten by the next synchronization.
+
+### Preview provider finding — validated July 11, 2026
+
+The connection-created identity held Microsoft Sentinel Contributor and the
+documented Microsoft Graph application permission
+`CustomDetection.ReadWrite.All`. Its app-only Graph token could read a rule by
+stable ID, but native Repository validation returned
+`InvalidTemplateDeployment` with an inner `ProviderError` for all six
+templates. The same Bicep and extension succeeded through a delegated direct
+deployment. Installing current Bicep CLI `v0.45.6` did not change the native
+result.
+
+Adding Azure **Security Admin** did not fix the provider after a fresh login
+and a full propagation interval, so that diagnostic assignment was removed.
+Do not grant Owner or Security Admin as a workaround. Preserve the Repository
+run and tracking IDs for Microsoft support, then choose one bounded alternative
+until the preview service is corrected.
+
+## Manual Graph preview fallback
+
+The fallback compiles the same six Bicep files, extracts only the custom-rule
+properties, and performs an exact-ID GET followed by POST or PATCH through the
+official Microsoft Graph beta custom-detection API. It then reads each stable
+ID back and verifies the desired status, schedule, KQL, alert metadata, MITRE
+mapping, host mapping, and absence of response actions.
+
+The included GitHub workflow uses:
+
+- a dedicated Entra application with only the application permission
+  `CustomDetection.ReadWrite.All`;
+- GitHub OIDC instead of a client secret;
+- no Azure subscription role;
+- the `custom-detection-fallback` environment, restricted to `main`;
+- manual dispatch plus the exact confirmation `DEPLOY_PREVIEW_FALLBACK`;
+- no delete, prune, or adoption of a conflicting rule with another stable ID.
+
+Plan locally without obtaining a token or changing the tenant:
+
+```powershell
+./scripts/Deploy-CustomDetectionsGraph.ps1 -Mode Plan -Scope All
+```
+
+To apply, manually run **Deploy custom detections - preview fallback** from the
+default branch. Start with `Canary`, confirm its disabled state, and then run
+`All`. Disable this fallback when native Repository synchronization succeeds.
+
+The Graph endpoint is tenant-scoped and beta. This fallback is suitable for
+this Defender XDR `Device*`-table pack; it is not presented as a general
+replacement for workspace-scoped Sentinel content.
+
+See [the fallback identity and environment setup](docs/GRAPH-FALLBACK.md) when
+forking the lab into another tenant.
 
 ## Direct Bicep alternative
 
@@ -207,6 +266,8 @@ Never use complete-mode resource-group deployment as a cleanup shortcut.
 
 - [Microsoft GigaWiper research](https://www.microsoft.com/en-us/security/blog/2026/07/09/gigawiper-anatomy-of-a-destructive-backdoor-assembled-from-multiple-malware/)
 - [Deploy custom detection rules as code](https://learn.microsoft.com/en-us/azure/sentinel/ci-cd-custom-content#deploy-custom-detection-rules-as-code-preview)
+- [Create a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-post-detectionrules?view=graph-rest-beta)
+- [Update a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-update?view=graph-rest-beta)
 - [Primary and secondary Sentinel workspaces in the Defender portal](https://learn.microsoft.com/en-us/azure/sentinel/workspaces-defender-portal)
 - [Create custom detection rules](https://learn.microsoft.com/en-us/defender-xdr/custom-detection-rules)
 

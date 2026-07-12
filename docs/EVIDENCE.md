@@ -10,10 +10,15 @@ This file separates observed evidence from planned or synthetic validation.
 | Stable letter-prefixed ID reaches provider | Direct-Bicep deployment reached Microsoft Security provider | Observed; provider repeatedly returned an internal error during execution | 2026-07-11 |
 | Preview accepts one tactic per rule | Graph API rejected a two-tactic rule with `Only one tactic is currently supported` | Observed; CI guard added | 2026-07-11 |
 | Rule engine accepts corrected pack | Graph API create/read/delete round trip, then live validation deployment | Passed: five enabled rules, one disabled canary, zero response actions | 2026-07-11 |
-| Native Sentinel Repository connection | Source Controls API plus generated OIDC workflow and repository commits | Connected with `CustomDetection`; deployment remains pending | 2026-07-11 |
-| Native Sentinel Repository synchronization | Generated GitHub workflow | Pending; execution still returns `InvalidTemplateDeployment` after tenant activation, and Defender portal primary-workspace state remains unresolved | 2026-07-11 |
+| Native Sentinel Repository connection | Source Controls API plus generated OIDC workflow and repository commits | Connected to `main` with `CustomDetection`; Defender portal shows the correct content type | 2026-07-11 |
+| Native Sentinel Repository synchronization | Generated GitHub workflow run `29178665606`, three attempts | Observed preview failure: all six exact templates returned `InvalidTemplateDeployment` / inner `ProviderError`; the portal status remained stale at `In progress` | 2026-07-11 |
+| Repository identity authorization | Token-safe diagnostic using the connection identity | Passed: app-only token contained `CustomDetection.ReadWrite.All`, exact Graph GET returned 200, and Azure deployment rights were present | 2026-07-11 |
+| Provider-versus-Graph isolation | Same connection identity, same rule ID | Provider validation failed internally while direct Graph authorization succeeded; current Microsoft documentation lists no additional app-only role | 2026-07-11 |
+| Broad-role diagnostic | Temporary Azure Security Admin at the exact resource-group scope | Did not change the failure after a fresh login and full propagation interval; assignment removed | 2026-07-11 |
+| Dedicated Graph fallback identity | Entra app, GitHub OIDC credential, Graph app-role assignment, Azure RBAC audit | Passed configuration: only `CustomDetection.ReadWrite.All`, environment-scoped OIDC, and zero Azure role assignments | 2026-07-11 |
+| Graph fallback workflow | Manual `main`-only workflow and exact-ID upsert script | Implemented; live canary/all workflow evidence pending | 2026-07-11 |
 | Five rules enabled and canary disabled | Microsoft Graph custom-detection API | Passed for validation deployment; Repository ownership remains pending | 2026-07-11 |
-| Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default-deny NSG | 2026-07-11 |
+| Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default inbound deny with no custom inbound NSG rules | 2026-07-11 |
 | Safe endpoint jobs executed | Azure managed Run Command instance views | Passed: task/registry, custom-log clear, filename-only `mc.exe`, and eight decoy renames all exited 0 | 2026-07-11 |
 | Live KQL validation | Defender XDR Advanced Hunting using the exact checked-in queries | Passed for NLS-GW-001, NLS-GW-003, NLS-GW-004, and NLS-GW-005 against real benign events | 2026-07-11 |
 | `.candy` rename collection | Three bounded decoy runs on Windows Server 2022 | Passed after ingestion delay: seven `FileRenamed` rows surfaced from the Public Documents copy-plus-move variant and satisfied the five-in-five-minutes threshold | 2026-07-11 |
@@ -37,6 +42,34 @@ The Bicep compiler and ARM validation accepted rules with multiple tactic
 objects. The live Graph rule API returned `InvalidInput` because the preview
 currently accepts only one tactic per rule. The pack now keeps the primary
 tactic for each rule and `Test-Lab.ps1` enforces that runtime contract.
+
+## Repository preview provider finding
+
+The Repository connection itself is valid: it targets `main`, selects
+`CustomDetection`, creates the expected OIDC deployment workflow, and provisions
+an identity with Microsoft Sentinel Contributor plus the documented Graph
+application permission `CustomDetection.ReadWrite.All`. A token-safe diagnostic
+confirmed that the exact identity could call the custom-detection Graph API.
+
+Despite that, three native workflow attempts failed all six resources during
+provider validation with `InvalidTemplateDeployment` and an inner
+`ProviderError: Encountered internal server error`. Direct deployment of the
+same compiled Bicep succeeded under the delegated user path, and a direct Graph
+GET retrieved the disabled canary by stable ID. Reproducing with Bicep CLI
+`v0.45.6` excluded the runner's older compiler as the cause.
+
+A temporary Azure Security Admin assignment was used only to falsify the
+missing-Azure-role hypothesis. It did not change the result after propagation
+and was removed. No current Microsoft documentation requires that broad role
+for the app-only custom-detection path. The evidence therefore supports a
+preview Microsoft Security provider/app-only path defect, not malformed lab
+content or missing documented IAM.
+
+The bounded fallback uses a separate Graph-only application with no Azure role
+assignments. Its workflow is manual, restricted to `main`, compiles the same
+Bicep source, creates or updates only the six stable IDs, performs no deletion,
+and verifies each rule by exact ID. Native Repository synchronization and the
+fallback must not run concurrently.
 
 ## Endpoint activation finding
 
