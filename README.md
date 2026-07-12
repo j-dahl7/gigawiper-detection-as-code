@@ -61,12 +61,19 @@ activity and is excluded from production screenshots unless explicitly needed.
 ## Prerequisites
 
 - Microsoft 365 E5 or an equivalent license that includes Defender XDR.
-- Microsoft Sentinel workspace onboarded to the Microsoft Defender portal.
+- Microsoft Sentinel workspace onboarded to the Microsoft Defender portal and
+  selected as the primary workspace. Custom detections are a primary-workspace
+  capability in the current Defender portal model.
 - Owner on the resource group containing the connected Sentinel workspace.
 - GitHub Actions enabled for Repository smart deployments.
 - Azure CLI and Bicep for local validation or the direct deployment path.
 - A disposable Windows endpoint onboarded to Microsoft Defender for Endpoint
   for live benign telemetry validation.
+
+Before endpoint testing, confirm the Defender for Endpoint tenant is active,
+not merely licensed. A sensor can report local onboarding success while the API
+still returns `Account mode is inactive`; Microsoft documents that first-time
+Defender for Cloud integration can take up to 12 hours.
 
 The capability is preview. This repository was built against:
 
@@ -88,8 +95,13 @@ The test compiles every Bicep file and verifies:
 - stable IDs begin with a letter and stay within the provider's character rules;
 - IDs and display names are unique;
 - every query returns `Timestamp`, `DeviceId`, and `ReportId`;
+- each preview rule declares no more than one MITRE tactic;
 - automated response actions are absent;
 - no destructive commands appear in the safe telemetry script.
+
+The disposable endpoint template obtains the MDE onboarding payload at deploy
+time from `Microsoft.Security/mdeOnboardings/Windows`. The protected payload is
+never written to the repository, test output, or deployment outputs.
 
 ## Deploy with Sentinel Repositories
 
