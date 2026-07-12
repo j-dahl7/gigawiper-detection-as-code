@@ -17,7 +17,7 @@ This file separates observed evidence from planned or synthetic validation.
 | Broad-role diagnostic | Temporary Azure Security Admin at the exact resource-group scope | Did not change the failure after a fresh login and full propagation interval; assignment removed | 2026-07-11 |
 | Graph fallback canary | Manual workflow run `29180371449` | Passed: exact canary ID updated/read back, disabled, with zero response actions | 2026-07-12 |
 | Graph fallback full pack | Manual workflow run `29180593038` | Passed: all six exact IDs updated/read back; canary disabled, five behavior rules enabled, and zero response actions on every rule | 2026-07-12 |
-| Graph fallback scheduler inspection | Read-only workflow run `29193356536` | Observed: all five enabled rules reported frequency `PT1H`, `lastRunDateTime` `12:04:27Z`, and `nextRunDateTime` `13:04:27Z`; last-run status and error fields were empty, the disabled canary remained disabled, and all rules had zero current `automatedActions` plus zero deprecated `responseActions` | 2026-07-12 |
+| Graph fallback scheduler inspection | Read-only workflow runs `29193356536` and `29193929962` | Observed: the post-telemetry recheck showed all five enabled rules at frequency `PT1H`, with `lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime` `2026-07-12T14:09:25.6533333Z`; last-run status and error fields were empty, the disabled canary remained disabled, and all rules had zero current `automatedActions` plus zero deprecated `responseActions` | 2026-07-12 |
 | Dedicated Graph fallback identity | Entra app-role and Azure RBAC audits plus GitHub OIDC configuration | Passed: only Graph application permission `CustomDetection.ReadWrite.All`, environment-scoped federated OIDC, no stored client secret, and zero Azure role assignments | 2026-07-12 |
 | Deployment-path sequencing | GitHub Actions run order and completion timestamps | Passed: canary run `29180371449` completed, native retry `29180501340` then completed in `Failed`, and full-pack run `29180593038` began afterward; native and fallback paths were never concurrent | 2026-07-12 |
 | Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six current rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
@@ -89,9 +89,10 @@ OIDC and had zero Azure RBAC assignments. Because the Repository path failed,
 it does not own these Graph-created or Graph-updated rules.
 
 Read-only inspection workflow run `29193356536` later retrieved all six current
-Graph objects without changing them. The five enabled behavior rules each
-reported frequency `PT1H`, `lastRunDateTime` `12:04:27Z`, and
-`nextRunDateTime` `13:04:27Z`; the disabled canary remained disabled. The
+Graph objects without changing them. Post-telemetry recheck run `29193929962`
+showed the five enabled behavior rules at frequency `PT1H`, with
+`lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime`
+`2026-07-12T14:09:25.6533333Z`; the disabled canary remained disabled. The
 last-run status and error fields were empty. Both the current
 `automatedActions` collection and deprecated `responseActions` collection were
 empty for every rule. This establishes scheduler metadata and execution timing

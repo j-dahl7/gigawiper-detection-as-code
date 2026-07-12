@@ -177,9 +177,10 @@ rules; the failed Repository connection does not own them. No custom alert is
 attributed to those Graph-fallback objects.
 
 Read-only inspection workflow run `29193356536` then retrieved the six stable
-Graph IDs without changing them. The five enabled behavior rules each reported
-frequency `PT1H`, `lastRunDateTime` `12:04:27Z`, and `nextRunDateTime`
-`13:04:27Z`; the disabled canary remained disabled. The current
+Graph IDs without changing them. A post-telemetry recheck in run `29193929962`
+showed the five enabled behavior rules at frequency `PT1H`, with
+`lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime`
+`2026-07-12T14:09:25.6533333Z`; the disabled canary remained disabled. The current
 `automatedActions` collection and the deprecated `responseActions` collection
 were both empty for every rule. The last-run status and error fields were also
 empty. This establishes Graph scheduler metadata and execution timing, but it
