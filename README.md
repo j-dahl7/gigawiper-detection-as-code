@@ -147,9 +147,10 @@ documented Microsoft Graph application permission
 `CustomDetection.ReadWrite.All`. Its app-only Graph token could read a rule by
 stable ID, but native Repository validation returned
 `InvalidTemplateDeployment` with an inner `ProviderError` for all six
-templates. The same Bicep and extension succeeded through a delegated direct
-deployment. Installing current Bicep CLI `v0.45.6` did not change the native
-result.
+templates. Delegated direct deployment of the same Bicep and extension reached
+the provider but also returned an internal error; the separate Microsoft Graph
+path accepted and read back the corrected rules. Installing current Bicep CLI
+`v0.45.6` did not change the native result.
 
 The latest native workflow run, `29180501340`, again failed all six resources,
 and the Repository connection surfaced the final **Failed** state. This is the
@@ -159,7 +160,7 @@ Adding Azure **Security Admin** did not fix the provider after a fresh login
 and a full propagation interval, so that diagnostic assignment was removed.
 Do not grant Owner or Security Admin as a workaround. Preserve the Repository
 run and tracking IDs for Microsoft support, then choose one bounded alternative
-until the preview service is corrected.
+while the preview-path root cause remains unresolved.
 
 ## Manual Graph preview fallback
 
@@ -230,28 +231,45 @@ replacement for workspace-scoped Sentinel content.
 See [the fallback identity and environment setup](docs/GRAPH-FALLBACK.md) when
 forking the lab into another tenant.
 
-## Portal-native NRT alert validation
+## Portal-native alert validation
 
 To validate the live rule engine independently of both preview deployment
-paths, a separate alert-only Continuous (NRT) canary named
-`NLS-GW-LIVE-004` was created manually in the Defender portal at `12:30:02Z`
-on July 12. It used the exact checked-in NLS-GW-004 query, targeted all devices,
-had zero response actions, and showed **Enabled** / **Running**.
+paths, three separate alert-only rules were created manually in the Defender
+portal with exact queries from this repository. All three targeted all devices,
+had zero automated response actions, and produced genuine **Custom detection** /
+**Microsoft Defender for Endpoint** alerts:
 
-A safe post-creation marker completed at `12:30:45Z` with
-`NetworkTransfer=False`. At `12:33Z`, Defender generated the medium-severity
-**Custom detection** / **Microsoft Defender for Endpoint** alert and correlated
-it into incident `628`. Defender displayed first activity as
+| Portal rule | Checked-in query and schedule | Live result |
+|---|---|---|
+| `NLS-GW-LIVE-001` (rule `152`) | Exact NLS-GW-001 scheduled query; created July 12 at `09:39:42` in the portal's UTC-5 display | High-severity Persistence alert `ede0f56adf-2532-41c2-98a8-ac08a2481201_aml`, linked to incident `628` at `09:46:42`; last run `10:39:42` **Completed**, next run `11:39:42` |
+| `NLS-GW-LIVE-003` (rule `153`) | Exact NLS-GW-003 scheduled query; created July 12 at `09:53:08` in the portal's UTC-5 display | High-severity Defense Evasion alert `ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml`, linked to incident `628` at `10:00:38`; last run `10:53:08` **Completed**, next run `11:53:08` |
+| `NLS-GW-LIVE-004` | Exact NLS-GW-004 Continuous (NRT) query; created July 12 at `12:30:02Z` | Medium-severity Exfiltration alert `eda016b9bd-4631-44d3-baa6-314b4f7ed032_aml`, linked to incident `628` at `12:33Z` |
+
+The 001 and 003 alerts came from genuine initial scheduled evaluations over the
+previously generated benign endpoint telemetry. They were not fabricated
+alerts and no new harmful behavior was executed to produce them. For 004, a
+safe post-creation marker completed at `12:30:45Z` with
+`NetworkTransfer=False`; Defender displayed first activity as
 `2026-07-11 19:47:54` and last activity as `2026-07-12 07:30:45` in the tenant's
-local-time display; the last activity is the safe post-creation marker.
+local-time display, with the last activity matching that safe marker.
 
-This proves the exact query, real endpoint telemetry, Continuous (NRT)
-scheduling, alert creation, and incident correlation for the separate
-portal-native canary. It does **not** attribute that alert or incident to the
-native Repository path or any Graph-fallback object. The later read-only Graph
-inspection independently established hourly scheduler execution timing for the
-five enabled fallback rules. The live portal screenshots are stored with the
-companion blog draft.
+The three alert detail pages now show incident `628` at High severity with
+**Active alerts 3/3**. This proves the exact checked-in queries, real endpoint
+telemetry, scheduled and Continuous (NRT) evaluation, alert creation, and
+incident correlation for the separate portal-native rules. It does **not**
+attribute any alert or incident to the native Repository path or a
+Graph-fallback object. The later read-only Graph inspection independently
+established hourly scheduler execution timing for the five enabled fallback
+rules, but Graph-rule alert attribution remains unestablished.
+
+NLS-GW-005 has an explicit boundary. Its exact checked-in aggregation and a
+raw-row adapter both returned live `DeviceFileEvents` data, but fresh unified
+custom-detection wizards repeatedly displayed **Supported entities could not be
+loaded** and left **Add assets** disabled. No portal-native 005 rule was created,
+and no 005 alert is claimed. This is an observed portal/session failure with no
+assigned root cause, not proof that aggregate custom detections or NLS-GW-005
+are unsupported. The live portal screenshots are stored with the companion blog
+draft.
 
 ## Direct Bicep alternative
 
@@ -335,8 +353,9 @@ Microsoft-generated alert.
 3. Delete the six stable Graph-fallback IDs declared in `detections/*.bicep`
    from Defender XDR, or use an appropriately authorized Microsoft Graph
    cleanup workflow with `CustomDetection.ReadWrite.All`.
-4. Separately delete the portal-native `NLS-GW-LIVE-004` canary. It is not one
-   of the six Graph-fallback IDs.
+4. Separately delete the portal-native `NLS-GW-LIVE-001`,
+   `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004` rules. They are not among the six
+   Graph-fallback IDs.
 5. Delete only the disposable Azure resource group created for endpoint testing.
 
 Never use complete-mode resource-group deployment as a cleanup shortcut.

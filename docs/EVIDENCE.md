@@ -28,9 +28,15 @@ This file separates observed evidence from planned or synthetic validation.
 | `.candy` rename collection | Three bounded decoy runs on Windows Server 2022 | Passed after ingestion delay: seven `FileRenamed` rows surfaced from the Public Documents copy-plus-move variant and satisfied the five-in-five-minutes threshold | 2026-07-11 |
 | Synthetic query fixtures | Live Advanced Hunting execution of `tests/synthetic-unit-tests.kql` | Passed: five named test rows, including recovery tampering and `.candy` aggregation | 2026-07-11 |
 | Pre-canary custom-alert check | Defender XDR Incidents and Advanced Hunting `AlertInfo` | Observed before the portal-native canary was created: an exact `NLS-GW` incident search returned zero incidents, and a 24-hour query for `Title startswith "NLS-GW"` or `DetectionSource contains "Custom"` returned no results | 2026-07-12 |
+| Portal-native scheduled NLS-GW-001 rule | Defender unified custom-detection page, rule `152` | Passed: created July 12 at `09:39:42` in the portal's UTC-5 display with the exact checked-in scheduled query; High severity, Persistence, all devices, zero automated response actions; last run `10:39:42` **Completed**, next run `11:39:42` | 2026-07-12 |
+| Portal-native NLS-GW-001 alert | Defender XDR alert page | Passed: genuine initial scheduled evaluation over previously generated benign telemetry produced **Custom detection** / **Microsoft Defender for Endpoint** alert `ede0f56adf-2532-41c2-98a8-ac08a2481201_aml`, linked to incident `628` at `09:46:42` in the portal's UTC-5 display | 2026-07-12 |
+| Portal-native scheduled NLS-GW-003 rule | Defender unified custom-detection page, rule `153` | Passed: created July 12 at `09:53:08` in the portal's UTC-5 display with the exact checked-in scheduled query; High severity, Defense Evasion, all devices, zero automated response actions; last run `10:53:08` **Completed**, next run `11:53:08` | 2026-07-12 |
+| Portal-native NLS-GW-003 alert | Defender XDR alert page | Passed: genuine initial scheduled evaluation over previously generated benign telemetry produced **Custom detection** / **Microsoft Defender for Endpoint** alert `ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml`, linked to incident `628` at `10:00:38` in the portal's UTC-5 display | 2026-07-12 |
 | Portal-native NRT canary | Defender unified custom-detection page | Passed: alert-only Continuous (NRT) canary `NLS-GW-LIVE-004` was created at `12:30:02Z` with the exact NLS-GW-004 query; status **Enabled** / **Running**, all devices, and zero response actions | 2026-07-12 |
 | Post-creation safe marker | Azure managed Run Command and Defender endpoint telemetry | Passed: marker completed at `12:30:45Z` with `NetworkTransfer=False` | 2026-07-12 |
-| Portal-native custom alert and incident | Defender XDR alert and incident pages | Passed: at `12:33Z`, Defender produced a medium-severity **Custom detection** / **Microsoft Defender for Endpoint** alert and correlated it into incident `628`; the tenant-local display showed first activity `2026-07-11 19:47:54` and last activity `2026-07-12 07:30:45` | 2026-07-12 |
+| Portal-native NLS-GW-004 alert | Defender XDR alert page | Passed: at `12:33Z`, after the safe post-creation marker, Defender produced medium-severity Exfiltration **Custom detection** / **Microsoft Defender for Endpoint** alert `eda016b9bd-4631-44d3-baa6-314b4f7ed032_aml` and linked it to incident `628`; the alert's first activity predated rule creation and its last activity `2026-07-12 07:30:45` matched the marker | 2026-07-12 |
+| Portal-native incident correlation | Defender XDR incident and all three alert-detail pages | Passed: incident `628` is High severity with **Active alerts 3/3**; all three alerts are **Custom detection** / **Microsoft Defender for Endpoint** and have zero automated response actions | 2026-07-12 |
+| Portal-native NLS-GW-005 boundary | Advanced Hunting plus repeated fresh unified custom-detection wizards | Observed: the exact checked-in aggregation and a raw-row adapter both returned live `DeviceFileEvents` data, but the wizards repeatedly displayed `Supported entities could not be loaded` with **Add assets** disabled; no 005 portal rule or alert exists or is claimed | 2026-07-12 |
 | Safe filename emulator produced built-in coverage | Defender for Endpoint alert API | Passed: `System executable renamed and launched`; recorded separately and not presented as a GigaWiper or custom-rule alert | 2026-07-11 |
 | Destructive behavior executed | Prohibited | Not performed |
 | Built-in Microsoft GigaWiper alert reproduced | Requires malware; outside lab boundary | Not claimed |
@@ -62,17 +68,18 @@ Despite that, native workflow run `29178665606` failed all six resources during
 three provider-validation attempts, and the later run `29180501340` again failed
 all six with `InvalidTemplateDeployment` and an inner `ProviderError:
 Encountered internal server error`. The Repository connection now visibly
-reports **Failed**. Direct deployment of the same compiled Bicep succeeded under
-the delegated user path, and a direct Graph GET retrieved the disabled canary
-by stable ID. Reproducing with Bicep CLI `v0.45.6` excluded the runner's older
-compiler as the cause.
+reports **Failed**. Delegated direct deployment of the same compiled Bicep also
+reached the provider and returned an internal error, while a separate direct
+Graph GET retrieved the disabled canary by stable ID. Reproducing with Bicep
+CLI `v0.45.6` excluded the runner's older compiler as the cause.
 
 A temporary Azure Security Admin assignment was used only to falsify the
 missing-Azure-role hypothesis. It did not change the result after propagation
 and was removed. No current Microsoft documentation requires that broad role
-for the app-only custom-detection path. The evidence therefore supports a
-preview Microsoft Security provider/app-only path defect, not malformed lab
-content or missing documented IAM.
+for the app-only custom-detection path. The evidence is consistent with a
+Microsoft Security provider/app-only path issue after the documented
+prerequisites were met, but the root cause remains unconfirmed. Preserve the
+Repository run and tracking IDs for Microsoft Support.
 
 The bounded fallback uses a separate Graph-only application with no Azure role
 assignments. Its workflow is manual, restricted to `main`, compiles the same
@@ -107,25 +114,49 @@ transfer. Before a separate portal-native canary was created, the exact
 `NLS-GW` incident search returned zero incidents and the 24-hour `AlertInfo`
 check for an `NLS-GW` title or `Custom` detection source returned no results.
 
-## Portal-native NRT scheduler finding
+## Portal-native scheduler and alert finding
 
-At `12:30:02Z` on July 12, the alert-only Continuous (NRT) canary
-`NLS-GW-LIVE-004` was created manually in the Defender portal with the exact
-NLS-GW-004 query. The portal showed it **Enabled** and **Running**, targeting all
-devices with zero response actions. A safe post-creation marker completed at
-`12:30:45Z` with `NetworkTransfer=False`. At `12:33Z`, Defender generated the
-medium-severity **Custom detection** / **Microsoft Defender for Endpoint** alert
-and correlated it into incident `628`. The tenant-local display showed first
-activity `2026-07-11 19:47:54` and last activity `2026-07-12 07:30:45`; the last
-activity is the safe post-creation marker.
+Three separate alert-only rules were created manually in the Defender portal
+with exact checked-in queries, all devices in scope, and zero automated response
+actions. Scheduled rule `NLS-GW-LIVE-001` (portal rule `152`) was created July 12
+at `09:39:42` in the portal's UTC-5 display. Its High-severity Persistence alert
+`ede0f56adf-2532-41c2-98a8-ac08a2481201_aml` linked to incident `628` at
+`09:46:42`; its last run at `10:39:42` was **Completed**, with the next run at
+`11:39:42`. Scheduled rule `NLS-GW-LIVE-003` (portal rule `153`) was created at
+`09:53:08`. Its High-severity Defense Evasion alert
+`ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml` linked to the same incident at
+`10:00:38`; its last run at `10:53:08` was **Completed**, with the next run at
+`11:53:08`.
 
-This proves the exact query, real endpoint telemetry, Continuous (NRT)
-scheduler, alert creation, and incident correlation for the separate
-portal-native canary. It does not attribute that alert or incident to the native
-Repository path or a Graph-fallback object. Read-only Graph inspection
-independently established hourly scheduler execution timing for the five enabled
-fallback rules. Screenshots of the live portal evidence are stored with the
-companion blog draft.
+Those two alerts were genuine initial scheduled evaluations over previously
+generated benign endpoint telemetry, not fabricated alerts or newly executed
+harmful behavior. Separately, the Continuous (NRT) rule `NLS-GW-LIVE-004` was
+created at `12:30:02Z`. A safe post-creation marker completed at `12:30:45Z`
+with `NetworkTransfer=False`; at `12:33Z`, Defender generated medium-severity
+Exfiltration alert `eda016b9bd-4631-44d3-baa6-314b4f7ed032_aml`. The tenant-local
+display showed first activity `2026-07-11 19:47:54`, which predated rule
+creation, and last activity `2026-07-12 07:30:45`, which matched the safe
+marker. This proves the genuine NRT alert incorporated a post-rule event; it
+does not establish that the marker was the alert's sole cause.
+
+All three are **Custom detection** / **Microsoft Defender for Endpoint** alerts,
+and all three alert detail pages now show incident `628` at High severity with
+**Active alerts 3/3**. This proves the exact queries, real endpoint telemetry,
+scheduled and Continuous (NRT) evaluation, alert creation, and incident
+correlation for the separate portal-native rules. It does not attribute an
+alert or incident to the native Repository path or a Graph-fallback object.
+Read-only Graph inspection independently established hourly scheduler execution
+timing for the five enabled fallback rules, but Graph-rule alert attribution
+remains unestablished.
+
+NLS-GW-005 remains an explicit boundary. Its exact checked-in aggregation and a
+raw-row adapter both returned live `DeviceFileEvents` data, but repeated fresh
+unified custom-detection wizards displayed `Supported entities could not be
+loaded` and left **Add assets** disabled. No 005 portal rule was created, and no
+005 alert exists or is claimed. This is recorded as an observed portal/session
+failure with no assigned root cause, not as proof that aggregate custom
+detections or NLS-GW-005 are unsupported. Screenshots of the live portal
+evidence are stored with the companion blog draft.
 
 ## Endpoint activation finding
 
