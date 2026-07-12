@@ -6,16 +6,19 @@ param(
 $ErrorActionPreference = 'Stop'
 $labRoot = Join-Path $env:ProgramData 'NLS-GigaWiper-Lab'
 $decoyRoot = Join-Path $labRoot 'decoys'
-$registryPath = 'HKCU:\SOFTWARE\OneDrive\Environment'
+$registryNativePath = if ([Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) {
+    'HKU\S-1-5-18\SOFTWARE\OneDrive\Environment'
+}
+else {
+    'HKCU\SOFTWARE\OneDrive\Environment'
+}
 $taskName = 'OneDrive Update'
 $eventLogName = 'NLS-GigaWiper-Lab'
 $eventSource = 'NLS-GigaWiper-SafeTelemetry'
 
 function Remove-LabArtifacts {
     schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
-    if (Test-Path -LiteralPath $registryPath) {
-        Remove-Item -LiteralPath $registryPath -Recurse -Force
-    }
+    reg.exe DELETE $registryNativePath /F 2>$null | Out-Null
     if ([System.Diagnostics.EventLog]::SourceExists($eventSource)) {
         Remove-EventLog -Source $eventSource
     }
@@ -41,11 +44,10 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 if ($PSCmdlet.ShouldProcess($labRoot, 'Generate bounded benign telemetry')) {
     New-Item -ItemType Directory -Path $decoyRoot -Force | Out-Null
 
-    New-Item -Path $registryPath -Force | Out-Null
-    New-ItemProperty -Path $registryPath -Name 'NLSLabMarker' -Value 'SAFE-TELEMETRY-ONLY' -PropertyType String -Force | Out-Null
+    reg.exe ADD $registryNativePath /V 'NLSLabMarker' /T REG_SZ /D 'SAFE-TELEMETRY-ONLY' /F | Out-Null
 
     $startTime = (Get-Date).AddMinutes(10).ToString('HH:mm')
-    schtasks.exe /Create /TN $taskName /TR 'cmd.exe /c exit 0' /SC ONCE /ST $startTime /F | Out-Null
+    schtasks.exe /Create /TN $taskName /TR 'cmd.exe /c exit 0' /SC ONCE /ST $startTime /RU SYSTEM /F | Out-Null
 
     if (-not [System.Diagnostics.EventLog]::SourceExists($eventSource)) {
         New-EventLog -LogName $eventLogName -Source $eventSource
@@ -59,8 +61,11 @@ if ($PSCmdlet.ShouldProcess($labRoot, 'Generate bounded benign telemetry')) {
 
     1..8 | ForEach-Object {
         $source = Join-Path $decoyRoot ("decoy-{0:D2}.txt" -f $_)
+        $target = "decoy-{0:D2}.candy" -f $_
         Set-Content -LiteralPath $source -Value "NLS harmless decoy $_" -Encoding utf8
-        Rename-Item -LiteralPath $source -NewName ([IO.Path]::GetFileNameWithoutExtension($source) + '.candy')
+        Start-Sleep -Milliseconds 250
+        cmd.exe /D /C ('ren "{0}" "{1}"' -f $source, $target) | Out-Null
+        Start-Sleep -Milliseconds 250
     }
 }
 
@@ -68,7 +73,7 @@ if ($PSCmdlet.ShouldProcess($labRoot, 'Generate bounded benign telemetry')) {
     Safe = $true
     Operation = 'generate'
     ScheduledTask = $taskName
-    RegistryPath = $registryPath
+    RegistryPath = $registryNativePath
     ClearedLog = $eventLogName
     DecoyFiles = 8
     RealEncryption = $false
