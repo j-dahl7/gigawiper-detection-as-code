@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $labRoot = Join-Path $env:ProgramData 'NLS-GigaWiper-Lab'
-$decoyRoot = Join-Path $labRoot 'decoys'
+$decoyRoot = Join-Path $env:PUBLIC 'Documents\NLS-GigaWiper-Lab'
 $registryNativePath = if ([Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) {
     'HKU\S-1-5-18\SOFTWARE\OneDrive\Environment'
 }
@@ -24,6 +24,9 @@ function Remove-LabArtifacts {
     }
     if (Test-Path -LiteralPath $labRoot) {
         Remove-Item -LiteralPath $labRoot -Recurse -Force
+    }
+    if (Test-Path -LiteralPath $decoyRoot) {
+        Remove-Item -LiteralPath $decoyRoot -Recurse -Force
     }
 }
 
@@ -60,12 +63,12 @@ if ($PSCmdlet.ShouldProcess($labRoot, 'Generate bounded benign telemetry')) {
     & $mcPath /c 'echo NLS safe MinIO mirror simulation - no transfer performed' | Out-Null
 
     1..8 | ForEach-Object {
-        $source = Join-Path $decoyRoot ("decoy-{0:D2}.txt" -f $_)
+        $source = Join-Path $decoyRoot ("decoy-{0:D2}.tmp" -f $_)
         $target = "decoy-{0:D2}.candy" -f $_
-        Set-Content -LiteralPath $source -Value "NLS harmless decoy $_" -Encoding utf8
-        Start-Sleep -Milliseconds 250
-        cmd.exe /D /C ('ren "{0}" "{1}"' -f $source, $target) | Out-Null
-        Start-Sleep -Milliseconds 250
+        Copy-Item -LiteralPath (Join-Path $env:SystemRoot 'System32\cmd.exe') -Destination $source -Force
+        Start-Sleep -Milliseconds 500
+        Move-Item -LiteralPath $source -Destination (Join-Path $decoyRoot $target) -Force
+        Start-Sleep -Milliseconds 500
     }
 }
 

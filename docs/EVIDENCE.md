@@ -15,10 +15,11 @@ This file separates observed evidence from planned or synthetic validation.
 | Five rules enabled and canary disabled | Microsoft Graph custom-detection API | Passed for validation deployment; Repository ownership remains pending | 2026-07-11 |
 | Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default-deny NSG | 2026-07-11 |
 | Safe endpoint jobs executed | Azure managed Run Command instance views | Passed: task/registry, custom-log clear, filename-only `mc.exe`, and eight decoy renames all exited 0 | 2026-07-11 |
-| Live KQL validation | Defender XDR Advanced Hunting using the exact checked-in queries | Passed for NLS-GW-001, NLS-GW-003, and NLS-GW-004 against real benign events | 2026-07-11 |
-| `.candy` rename collection | Three bounded decoy runs on Windows Server 2022 | Not observed: the sensor surfaced lab directory creation but not the individual rename events; NLS-GW-005 remains synthetic-only for this validation | 2026-07-11 |
+| Live KQL validation | Defender XDR Advanced Hunting using the exact checked-in queries | Passed for NLS-GW-001, NLS-GW-003, NLS-GW-004, and NLS-GW-005 against real benign events | 2026-07-11 |
+| `.candy` rename collection | Three bounded decoy runs on Windows Server 2022 | Passed after ingestion delay: seven `FileRenamed` rows surfaced from the Public Documents copy-plus-move variant and satisfied the five-in-five-minutes threshold | 2026-07-11 |
 | Synthetic query fixtures | Live Advanced Hunting execution of `tests/synthetic-unit-tests.kql` | Passed: five named test rows, including recovery tampering and `.candy` aggregation | 2026-07-11 |
-| Safe activity produced an alert | Defender XDR | Pending |
+| Safe activity produced a custom-rule alert | Defender XDR | Pending: all five enabled rules advanced their hourly `lastRunDateTime`, but no NLS-GW alert was visible after the first completed evaluation | 2026-07-11 |
+| Safe filename emulator produced built-in coverage | Defender for Endpoint alert API | Passed: `System executable renamed and launched`; recorded separately and not presented as a GigaWiper or custom-rule alert | 2026-07-11 |
 | Destructive behavior executed | Prohibited | Not performed |
 | Built-in Microsoft GigaWiper alert reproduced | Requires malware; outside lab boundary | Not claimed |
 
@@ -53,12 +54,13 @@ then became available for live query validation.
 ## Sensor-fidelity finding
 
 The Server 2022 sensor collected the scheduled-task and TaskCache correlation,
-the custom lab-log clear, and the filename-only `mc.exe` execution. Three safe
-`.candy` decoy variants completed locally—PowerShell rename, native `ren`, and
-copy-plus-move in Public Documents—but Advanced Hunting exposed only the lab
-directory creation events, not the individual file renames. The rule remains a
-valid impact-stage hypothesis and is covered by synthetic KQL fixtures, but this
-ledger does not label it live-validated on this endpoint.
+the custom lab-log clear, and the filename-only `mc.exe` execution quickly.
+Small text-file renames under ProgramData initially surfaced only the directory
+creation. A third safe variant copied the signed Windows `cmd.exe` eight times
+to Public Documents, renamed the inert copies from `.tmp` to `.candy`, and never
+executed them. Seven `FileRenamed` rows arrived after a longer ingestion delay,
+and the exact NLS-GW-005 aggregation returned one seven-file match. The checked-
+in harness uses this observed path and still retains synthetic fixtures.
 
 ## Evidence levels
 
