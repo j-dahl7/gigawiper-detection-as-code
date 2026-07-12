@@ -20,13 +20,16 @@ This file separates observed evidence from planned or synthetic validation.
 | Dedicated Graph fallback identity | Entra app-role and Azure RBAC audits plus GitHub OIDC configuration | Passed: only Graph application permission `CustomDetection.ReadWrite.All`, environment-scoped federated OIDC, no stored client secret, and zero Azure role assignments | 2026-07-12 |
 | Deployment-path sequencing | GitHub Actions run order and completion timestamps | Passed: canary run `29180371449` completed, native retry `29180501340` then completed in `Failed`, and full-pack run `29180593038` began afterward; native and fallback paths were never concurrent | 2026-07-12 |
 | Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six current rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
-| Defender portal rule-list visibility | Unified Detection Rules page searched by exact `NLS-GW` prefix after successful Graph read-back | Pending: the page returned no matching rows; no portal-list screenshot or cause is claimed | 2026-07-12 |
+| Defender portal rule-list visibility | Unified custom-detection page searched by exact `NLS-GW` prefix after successful Graph read-back | Pending: the page returned **0 items** / **No data available**; a screenshot of the observed result is captured in the companion site draft, but no cause is claimed | 2026-07-12 |
 | Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default inbound deny with no custom inbound NSG rules | 2026-07-11 |
 | Safe endpoint jobs executed | Azure managed Run Command instance views | Passed: task/registry, custom-log clear, filename-only `mc.exe`, and eight decoy renames all exited 0 | 2026-07-11 |
-| Live KQL validation | Defender XDR Advanced Hunting using the exact checked-in queries | Passed for NLS-GW-001, NLS-GW-003, NLS-GW-004, and NLS-GW-005 against real benign events | 2026-07-11 |
+| Live KQL validation | Defender XDR Advanced Hunting using the exact checked-in queries | Passed for NLS-GW-001, NLS-GW-003, NLS-GW-004, and NLS-GW-005 against real benign events; a July 12 12-hour `DeviceProcessEvents` recheck returned two real `mc.exe` rows on `nls-gw-lab`, including the safe marker text, from a harness that performed no network transfer | 2026-07-12 |
 | `.candy` rename collection | Three bounded decoy runs on Windows Server 2022 | Passed after ingestion delay: seven `FileRenamed` rows surfaced from the Public Documents copy-plus-move variant and satisfied the five-in-five-minutes threshold | 2026-07-11 |
 | Synthetic query fixtures | Live Advanced Hunting execution of `tests/synthetic-unit-tests.kql` | Passed: five named test rows, including recovery tampering and `.candy` aggregation | 2026-07-11 |
-| Safe activity produced a custom-rule alert | Defender XDR | Pending: no custom `NLS-GW` alert is claimed; query matches and successful rule deployment are separate evidence levels | 2026-07-12 |
+| Pre-canary custom-alert check | Defender XDR Incidents and Advanced Hunting `AlertInfo` | Observed before the portal-native canary was created: an exact `NLS-GW` incident search returned zero incidents, and a 24-hour query for `Title startswith "NLS-GW"` or `DetectionSource contains "Custom"` returned no results | 2026-07-12 |
+| Portal-native NRT canary | Defender unified custom-detection page | Passed: alert-only Continuous (NRT) canary `NLS-GW-LIVE-004` was created at `12:30:02Z` with the exact NLS-GW-004 query; status **Enabled** / **Running**, all devices, and zero response actions | 2026-07-12 |
+| Post-creation safe marker | Azure managed Run Command and Defender endpoint telemetry | Passed: marker completed at `12:30:45Z` with `NetworkTransfer=False` | 2026-07-12 |
+| Portal-native custom alert and incident | Defender XDR alert and incident pages | Passed: at `12:33Z`, Defender produced a medium-severity **Custom detection** / **Microsoft Defender for Endpoint** alert and correlated it into incident `628`; the tenant-local display showed first activity `2026-07-11 19:47:54` and last activity `2026-07-12 07:30:45` | 2026-07-12 |
 | Safe filename emulator produced built-in coverage | Defender for Endpoint alert API | Passed: `System executable renamed and launched`; recorded separately and not presented as a GigaWiper or custom-rule alert | 2026-07-11 |
 | Destructive behavior executed | Prohibited | Not performed |
 | Built-in Microsoft GigaWiper alert reproduced | Requires malware; outside lab boundary | Not claimed |
@@ -85,8 +88,29 @@ OIDC and had zero Azure RBAC assignments. Because the Repository path failed,
 it does not own these Graph-created or Graph-updated rules.
 
 Successful deployment is not evidence of a custom alert. The safe telemetry
-produced live query matches for four behavior rules, but a custom `NLS-GW` alert
-remains pending and is not claimed.
+produced live query matches for four behavior rules. On July 12, a 12-hour
+`DeviceProcessEvents` recheck returned two real `mc.exe` rows on `nls-gw-lab`,
+including the safe marker text; the bounded harness performed no network
+transfer. Before a separate portal-native canary was created, the exact
+`NLS-GW` incident search returned zero incidents and the 24-hour `AlertInfo`
+check for an `NLS-GW` title or `Custom` detection source returned no results.
+
+## Portal-native NRT scheduler finding
+
+At `12:30:02Z` on July 12, the alert-only Continuous (NRT) canary
+`NLS-GW-LIVE-004` was created manually in the Defender portal with the exact
+NLS-GW-004 query. The portal showed it **Enabled** and **Running**, targeting all
+devices with zero response actions. A safe post-creation marker completed at
+`12:30:45Z` with `NetworkTransfer=False`. At `12:33Z`, Defender generated the
+medium-severity **Custom detection** / **Microsoft Defender for Endpoint** alert
+and correlated it into incident `628`. The tenant-local display showed first
+activity `2026-07-11 19:47:54` and last activity `2026-07-12 07:30:45`; the last
+activity is the safe post-creation marker.
+
+This proves the exact query, real endpoint telemetry, Continuous (NRT)
+scheduler, alert creation, and incident correlation. It does not prove that the
+native Repository objects or the Graph-fallback objects executed. Screenshots
+of the live portal evidence are stored with the companion blog draft.
 
 ## Endpoint activation finding
 

@@ -117,9 +117,21 @@ $graphFallbackFile = Join-Path $PSScriptRoot 'Deploy-CustomDetectionsGraph.ps1'
 $graphFallback = Get-Content -LiteralPath $graphFallbackFile -Raw
 $fallbackWorkflowFile = Join-Path $root '.github\workflows\graph-preview-fallback.yml'
 $fallbackWorkflow = Get-Content -LiteralPath $fallbackWorkflowFile -Raw
+$inspectStart = $graphFallback.IndexOf("if (`$Mode -eq 'Inspect')", [StringComparison]::Ordinal)
+$inspectEnd = if ($inspectStart -ge 0) {
+    $graphFallback.IndexOf('$compiledRules =', $inspectStart, [StringComparison]::Ordinal)
+} else {
+    -1
+}
+$inspectBlock = if ($inspectStart -ge 0 -and $inspectEnd -gt $inspectStart) {
+    $graphFallback.Substring($inspectStart, $inspectEnd - $inspectStart)
+} else {
+    ''
+}
 $fallbackContracts = [ordered]@{
     'manual-only workflow' = $fallbackWorkflow -match '(?m)^\s*workflow_dispatch:' -and $fallbackWorkflow -notmatch '(?m)^\s*(push|pull_request):'
-    'main-branch guard' = $fallbackWorkflow -match "github\.ref == 'refs/heads/main'"
+    'apply-only main-branch guard' = $fallbackWorkflow -match "github\.ref == 'refs/heads/main'" -and
+        $fallbackWorkflow -match "inputs\.operation == 'Apply'"
     'protected environment' = $fallbackWorkflow -match '(?m)^\s*environment:\s*custom-detection-fallback\s*$'
     'OIDC without subscription RBAC' = $fallbackWorkflow -match '(?m)^\s*allow-no-subscriptions:\s*true\s*$' -and $fallbackWorkflow -notmatch '(?m)^\s*subscription-id:'
     'pinned actions' = $fallbackWorkflow -match 'actions/checkout@[0-9a-f]{40}' -and $fallbackWorkflow -match 'azure/login@[0-9a-f]{40}'
@@ -127,6 +139,24 @@ $fallbackContracts = [ordered]@{
     'MITRE sub-technique normalization' = $graphFallback -match 'subTechniques' -and $graphFallback -match 'GetMitreFingerprints'
     'no delete or pruning' = $graphFallback -notmatch "ValidateSet\([^\r\n]*'DELETE'" -and $graphFallback -notmatch '(?i)prune'
     'app-only permission guidance' = $graphFallback -match 'CustomDetection\.ReadWrite\.All'
+    'manual read-only inspection' = $graphFallback -match "ValidateSet\('Plan', 'Apply', 'Inspect'\)" -and $fallbackWorkflow -match 'INSPECT_PREVIEW_FALLBACK'
+    'inspection uses exact-ID GET only' = $inspectBlock -match 'EscapeDataString' -and $inspectBlock -match '(?m)-Method GET' -and $inspectBlock -notmatch '(?m)-Method (POST|PATCH)'
+    'inspection requests metadata only' = $inspectBlock -match '\?\$select=id,status,schedule,lastRunDetails,detectionAction'
+    'inspection output is allowlisted' = @(
+        'Id',
+        'Status',
+        'Frequency',
+        'NextRunDateTime',
+        'LastRunStatus',
+        'LastRunDateTime',
+        'LastRunErrorCode',
+        'LastRunFailureReason',
+        'ResponseActionCount'
+    ).Where({ $graphFallback -match ("(?m)^\s*{0}\s*=" -f $_) }).Count -eq 9 -and
+        $inspectBlock -notmatch '(?i)queryText|displayName|createdBy|lastModifiedBy|requestId|tenant'
+    'inspection counts all response actions' = $graphFallback -match 'responseActions' -and
+        $graphFallback -match 'automatedActions\.PSObject\.Properties' -and
+        $graphFallback -match "property\.Name -notlike '@\*'"
 }
 foreach ($contract in $fallbackContracts.GetEnumerator()) {
     if (-not $contract.Value) {

@@ -172,14 +172,25 @@ Live validation completed in two manual runs: canary run `29180371449` passed,
 then full-pack run `29180593038` updated and read back all six exact IDs. The
 canary was disabled, the five behavior rules were enabled, and all six rules
 had zero automated response actions. These are Graph-created or Graph-updated
-rules; the failed Repository connection does not own them. A custom `NLS-GW`
-alert from the safe telemetry remains pending and is not claimed.
+rules; the failed Repository connection does not own them. No custom alert is
+attributed to those Graph-fallback objects.
 
-The unified Defender rule-management page did not surface the six `NLS-GW`
+The unified Defender custom-detection page did not surface the six `NLS-GW`
 objects during the July 12 validation window even though exact-ID Graph
-read-back succeeded. Portal-list visibility therefore remains pending and no
-rule-list screenshot is claimed. The evidence does not yet distinguish preview
-replication behavior from portal authorization or UI filtering.
+read-back succeeded. An exact `NLS-GW` search returned **0 items** and **No data
+available**; a screenshot of that observed result is captured in the companion
+site draft. Portal-list visibility therefore remains pending. The evidence does
+not yet distinguish preview replication behavior from portal authorization or
+UI filtering.
+
+Before the separate portal-native canary was created on July 12, an exact
+`NLS-GW` incident search found zero incidents and a 24-hour Advanced Hunting
+`AlertInfo` query for titles beginning with `NLS-GW` or a detection source
+containing `Custom` returned no results. Separately, a
+12-hour `DeviceProcessEvents` query returned two real `mc.exe` rows from
+`nls-gw-lab`, including the safe marker text. The bounded harness performed no
+network transfer. Those rows prove endpoint telemetry and query matching only;
+at that point they were not evidence of a custom alert.
 
 The included GitHub workflow uses:
 
@@ -207,6 +218,26 @@ replacement for workspace-scoped Sentinel content.
 
 See [the fallback identity and environment setup](docs/GRAPH-FALLBACK.md) when
 forking the lab into another tenant.
+
+## Portal-native NRT alert validation
+
+To validate the live rule engine independently of both preview deployment
+paths, a separate alert-only Continuous (NRT) canary named
+`NLS-GW-LIVE-004` was created manually in the Defender portal at `12:30:02Z`
+on July 12. It used the exact checked-in NLS-GW-004 query, targeted all devices,
+had zero response actions, and showed **Enabled** / **Running**.
+
+A safe post-creation marker completed at `12:30:45Z` with
+`NetworkTransfer=False`. At `12:33Z`, Defender generated the medium-severity
+**Custom detection** / **Microsoft Defender for Endpoint** alert and correlated
+it into incident `628`. Defender displayed first activity as
+`2026-07-11 19:47:54` and last activity as `2026-07-12 07:30:45` in the tenant's
+local-time display; the last activity is the safe post-creation marker.
+
+This proves the exact query, real endpoint telemetry, Continuous (NRT)
+scheduling, alert creation, and incident correlation. It does **not** prove that
+the native Repository objects or the Graph-fallback objects executed. The live
+portal screenshots are stored with the companion blog draft.
 
 ## Direct Bicep alternative
 
