@@ -12,6 +12,17 @@ let RegistryEvents = datatable(DeviceId:string, RegistryTimestamp:datetime, Regi
 [
     "device-lab-01", datetime(2026-07-11T12:02:00Z), @"HKEY_CURRENT_USER\SOFTWARE\OneDrive\Environment", "NLSLabMarker", "SAFE-TELEMETRY-ONLY"
 ];
+let FileEvents = datatable(Timestamp:datetime, DeviceId:string, ReportId:long, DeviceName:string, ActionType:string, FileName:string, FolderPath:string)
+[
+    datetime(2026-07-11T12:20:01Z), "device-lab-01", 2001, "nls-win-lab", "FileRenamed", "decoy-01.candy", @"C:\NLS-Decoys",
+    datetime(2026-07-11T12:20:02Z), "device-lab-01", 2002, "nls-win-lab", "FileRenamed", "decoy-02.candy", @"C:\NLS-Decoys",
+    datetime(2026-07-11T12:20:03Z), "device-lab-01", 2003, "nls-win-lab", "FileRenamed", "decoy-03.candy", @"C:\NLS-Decoys",
+    datetime(2026-07-11T12:20:04Z), "device-lab-01", 2004, "nls-win-lab", "FileRenamed", "decoy-04.candy", @"C:\NLS-Decoys",
+    datetime(2026-07-11T12:20:05Z), "device-lab-01", 2005, "nls-win-lab", "FileRenamed", "decoy-05.candy", @"C:\NLS-Decoys",
+    datetime(2026-07-11T12:20:06Z), "device-lab-01", 2006, "nls-win-lab", "FileRenamed", "decoy-06.candy", @"C:\NLS-Decoys",
+    datetime(2026-07-11T12:20:07Z), "device-lab-01", 2007, "nls-win-lab", "FileRenamed", "decoy-07.candy", @"C:\NLS-Decoys",
+    datetime(2026-07-11T12:20:08Z), "device-lab-01", 2008, "nls-win-lab", "FileRenamed", "decoy-08.candy", @"C:\NLS-Decoys"
+];
 let PersistenceResult = ProcessEvents
 | where FileName =~ "schtasks.exe" and ProcessCommandLine has "OneDrive Update"
 | join kind=innerunique RegistryEvents on DeviceId
@@ -26,5 +37,11 @@ let RecoveryResult = ProcessEvents
 let MinioResult = ProcessEvents
 | where FileName =~ "mc.exe" and ProcessCommandLine has " mirror "
 | project Test="MinIOStaging", Passed=true, Timestamp, DeviceId, ReportId;
-union PersistenceResult, LogClearResult, RecoveryResult, MinioResult
+let CandyResult = FileEvents
+| where ActionType == "FileRenamed" and FileName endswith ".candy"
+| extend DetectionWindow=bin(Timestamp, 5m)
+| summarize CandyFileCount=count(), arg_max(Timestamp, ReportId) by DeviceId, DetectionWindow
+| where CandyFileCount >= 5
+| project Test="CandyRenameBurst", Passed=true, Timestamp, DeviceId, ReportId;
+union PersistenceResult, LogClearResult, RecoveryResult, MinioResult, CandyResult
 | order by Test asc

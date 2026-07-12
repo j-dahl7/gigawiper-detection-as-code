@@ -8,6 +8,7 @@ resource detectionRule 'Microsoft.Security/detectionRules@2026-06-01-preview' = 
     queryText: '''
 let RegistrySignals = DeviceRegistryEvents
 | where RegistryKey endswith @"\SOFTWARE\OneDrive\Environment"
+    or RegistryKey endswith @"\Schedule\TaskCache\Tree\OneDrive Update"
 | project DeviceId, RegistryTimestamp=Timestamp, RegistryReportId=ReportId, RegistryKey, RegistryValueName, RegistryValueData, RegistryInitiatingProcess=InitiatingProcessFileName;
 DeviceProcessEvents
 | where FileName =~ "schtasks.exe"
@@ -24,7 +25,7 @@ DeviceProcessEvents
   detectionAction: {
     alertTemplate: {
       title: 'OneDrive-lookalike persistence chain on {{DeviceName}}'
-      description: 'Correlates creation of a scheduled task named OneDrive Update with activity under HKCU\\SOFTWARE\\OneDrive\\Environment. Review the task action, executable path, signer, parent process, and nearby network activity before containment.'
+      description: 'Correlates creation of a scheduled task named OneDrive Update with its Windows TaskCache registration or adjacent activity under HKCU\\SOFTWARE\\OneDrive\\Environment. Review the task action, executable path, signer, parent process, and nearby network activity before containment.'
       severity: 'high'
       tactics: [
         {
