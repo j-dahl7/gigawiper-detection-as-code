@@ -98,6 +98,21 @@ foreach ($value in $forbidden) {
     }
 }
 
+$syntheticFile = Join-Path $root 'tests\synthetic-unit-tests.kql'
+$syntheticContent = Get-Content -LiteralPath $syntheticFile -Raw
+$expectedSyntheticTests = @(
+    'PersistenceCorrelation',
+    'RecoveryTampering',
+    'EventLogDestruction',
+    'MinIOStaging',
+    'CandyRenameBurst'
+)
+foreach ($testName in $expectedSyntheticTests) {
+    if ($syntheticContent -notmatch ('Test="{0}"' -f [regex]::Escape($testName))) {
+        throw "Synthetic fixture coverage missing for $testName."
+    }
+}
+
 $summary = [pscustomobject]@{
     Passed = $true
     DetectionFiles = $files.Count
@@ -106,6 +121,7 @@ $summary = [pscustomobject]@{
     InfrastructureCompiled = $true
     InboundSecurityRules = 0
     MdeOnboardingPackage = 'ARM reference; not stored'
+    SyntheticTests = $expectedSyntheticTests.Count
     Results = $results
 }
 
@@ -113,5 +129,5 @@ if ($Json) {
     $summary | ConvertTo-Json -Depth 5
 } else {
     $results | Format-Table -AutoSize
-    Write-Host "Validated $($files.Count) detection templates, the zero-inbound endpoint template, $($ids.Count) unique IDs, and $($forbidden.Count) safety boundaries."
+    Write-Host "Validated $($files.Count) detection templates, the zero-inbound endpoint template, $($ids.Count) unique IDs, $($expectedSyntheticTests.Count) synthetic fixtures, and $($forbidden.Count) safety boundaries."
 }
