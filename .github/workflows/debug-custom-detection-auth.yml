@@ -140,7 +140,26 @@ jobs:
             } | ConvertTo-Json
           }
           elseif ($status -eq '409') {
-            Write-Host 'The disabled canary already exists; no duplicate was created.'
+            [pscustomobject]@{
+              graphStatus = $status
+              errorCode = $response.error.code
+              errorMessage = $response.error.message
+              requestId = $response.error.innerError.'request-id'
+            } | ConvertTo-Json -Depth 5
+
+            $getPath = Join-Path $env:RUNNER_TEMP 'canary-get-response.json'
+            $getStatus = curl.exe -4 -sS -o $getPath -w '%{http_code}' `
+              -H "Authorization: Bearer $graphToken" `
+              'https://graph.microsoft.com/beta/security/rules/detectionRules/nls-gw-000-canary'
+            $getResponse = Get-Content -Raw $getPath | ConvertFrom-Json
+            [pscustomobject]@{
+              getStatus = $getStatus
+              id = $getResponse.id
+              displayName = $getResponse.displayName
+              status = $getResponse.status
+              errorCode = $getResponse.error.code
+              errorMessage = $getResponse.error.message
+            } | ConvertTo-Json -Depth 5
           }
           else {
             [pscustomobject]@{
