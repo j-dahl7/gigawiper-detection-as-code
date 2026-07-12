@@ -124,6 +124,7 @@ $fallbackContracts = [ordered]@{
     'OIDC without subscription RBAC' = $fallbackWorkflow -match '(?m)^\s*allow-no-subscriptions:\s*true\s*$' -and $fallbackWorkflow -notmatch '(?m)^\s*subscription-id:'
     'pinned actions' = $fallbackWorkflow -match 'actions/checkout@[0-9a-f]{40}' -and $fallbackWorkflow -match 'azure/login@[0-9a-f]{40}'
     'exact-ID upsert' = $graphFallback -match 'detectionRules' -and $graphFallback -match 'EscapeDataString' -and $graphFallback -match "ValidateSet\('GET', 'POST', 'PATCH'\)"
+    'MITRE sub-technique normalization' = $graphFallback -match 'subTechniques' -and $graphFallback -match 'GetMitreFingerprints'
     'no delete or pruning' = $graphFallback -notmatch "ValidateSet\([^\r\n]*'DELETE'" -and $graphFallback -notmatch '(?i)prune'
     'app-only permission guidance' = $graphFallback -match 'CustomDetection\.ReadWrite\.All'
 }

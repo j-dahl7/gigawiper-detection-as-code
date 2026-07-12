@@ -200,22 +200,35 @@ function Assert-DetectionMatches {
         }
     }
 
-    $expectedTechniques = @(
-        $Expected.detectionAction.alertTemplate.tactics |
-            ForEach-Object {
-                $tactic = $_.tactic
-                $_.techniques | ForEach-Object { "$tactic/$($_.technique)" }
+    $getMitreFingerprints = {
+        param([object[]]$Tactics)
+
+        @(
+            $Tactics | ForEach-Object {
+                $tactic = ([string]$_.tactic).Trim().ToUpperInvariant()
+                $_.techniques | ForEach-Object {
+                    $technique = ([string]$_.technique).Trim().ToUpperInvariant()
+                    $subTechniques = @(
+                        $_.subTechniques |
+                            Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+                            ForEach-Object { ([string]$_).Trim().ToUpperInvariant() }
+                    )
+
+                    # Graph can canonicalize T1053.005 into technique T1053 plus
+                    # subTechniques [T1053.005]. Treat those forms as equivalent.
+                    if ($subTechniques.Count -gt 0) {
+                        $subTechniques | ForEach-Object { "$tactic/$_" }
+                    }
+                    elseif ($technique) {
+                        "$tactic/$technique"
+                    }
+                }
             } |
-            Sort-Object
-    )
-    $actualTechniques = @(
-        $Actual.detectionAction.alertTemplate.tactics |
-            ForEach-Object {
-                $tactic = $_.tactic
-                $_.techniques | ForEach-Object { "$tactic/$($_.technique)" }
-            } |
-            Sort-Object
-    )
+                Sort-Object -Unique
+        )
+    }
+    $expectedTechniques = & $getMitreFingerprints @($Expected.detectionAction.alertTemplate.tactics)
+    $actualTechniques = & $getMitreFingerprints @($Actual.detectionAction.alertTemplate.tactics)
     if (($expectedTechniques -join '|') -cne ($actualTechniques -join '|')) {
         throw "Verification mismatch for rule '$($Expected.id)' MITRE tactics or techniques."
     }
