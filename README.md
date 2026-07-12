@@ -175,6 +175,12 @@ had zero automated response actions. These are Graph-created or Graph-updated
 rules; the failed Repository connection does not own them. A custom `NLS-GW`
 alert from the safe telemetry remains pending and is not claimed.
 
+The unified Defender rule-management page did not surface the six `NLS-GW`
+objects during the July 12 validation window even though exact-ID Graph
+read-back succeeded. Portal-list visibility therefore remains pending and no
+rule-list screenshot is claimed. The evidence does not yet distinguish preview
+replication behavior from portal authorization or UI filtering.
+
 The included GitHub workflow uses:
 
 - a dedicated Entra application with only the application permission
@@ -266,7 +272,7 @@ Cleanup is exact-scope:
 
 | Level | Meaning |
 |---|---|
-| Live deployment | Rule compiled, was deployed by the explicitly named path, and appeared in Defender XDR |
+| Live deployment | Rule compiled, was deployed by the explicitly named path, and its exact state was read back from Defender XDR |
 | Real benign telemetry | The endpoint performed the bounded action and Defender collected it |
 | Synthetic query test | `datatable()` fixtures validate logic without performing the action |
 | Query guidance only | Useful hunt not claimed as a deployed alert |
