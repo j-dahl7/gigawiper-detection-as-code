@@ -97,6 +97,7 @@ The test compiles every Bicep file and verifies:
 - every query returns `Timestamp`, `DeviceId`, and `ReportId`;
 - each preview rule declares no more than one MITRE tactic;
 - automated response actions are absent;
+- all five behavior rules have named synthetic fixtures;
 - no destructive commands appear in the safe telemetry script.
 
 The disposable endpoint template obtains the MDE onboarding payload at deploy
@@ -135,7 +136,8 @@ same rule IDs at the same time.
 
 The script creates only bounded lab artifacts:
 
-- `HKCU\SOFTWARE\OneDrive\Environment` with an explicit lab marker;
+- `HKCU\SOFTWARE\OneDrive\Environment` with an explicit lab marker (the
+  equivalent `HKU\S-1-5-18` hive when a managed run executes as SYSTEM);
 - a harmless scheduled task named `OneDrive Update` whose action exits;
 - a custom `NLS-GigaWiper-Lab` event log, then clears only that custom log;
 - a copy of `cmd.exe` named `mc.exe` that only prints a simulation marker;
@@ -176,6 +178,7 @@ Never use complete-mode resource-group deployment as a cleanup shortcut.
 
 - [Microsoft GigaWiper research](https://www.microsoft.com/en-us/security/blog/2026/07/09/gigawiper-anatomy-of-a-destructive-backdoor-assembled-from-multiple-malware/)
 - [Deploy custom detection rules as code](https://learn.microsoft.com/en-us/azure/sentinel/ci-cd-custom-content#deploy-custom-detection-rules-as-code-preview)
+- [Primary and secondary Sentinel workspaces in the Defender portal](https://learn.microsoft.com/en-us/azure/sentinel/workspaces-defender-portal)
 - [Create custom detection rules](https://learn.microsoft.com/en-us/defender-xdr/custom-detection-rules)
 
 ## License
