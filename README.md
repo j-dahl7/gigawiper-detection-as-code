@@ -10,6 +10,10 @@ fallback when the provider fails.
 > Windows Security/System/Application logs. Destructive stages are validated
 > with synthetic rows only.
 
+For the complete live-result narrative, exact alert IDs, claim boundaries, and
+editorial notes, see the dated
+[validation handoff](docs/HANDOFF-2026-07-12.md).
+
 ## What this proves
 
 | Layer | Evidence |
