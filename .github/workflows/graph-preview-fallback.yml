@@ -1,0 +1,70 @@
+name: Deploy custom detections - preview fallback
+
+on:
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: Rules to apply
+        required: true
+        type: choice
+        options:
+          - Canary
+          - All
+        default: Canary
+      confirmation:
+        description: Type DEPLOY_PREVIEW_FALLBACK
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AZURE_CORE_OUTPUT: none
+
+concurrency:
+  group: custom-detection-preview-fallback
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'DEPLOY_PREVIEW_FALLBACK' }}
+    runs-on: windows-latest
+    environment: custom-detection-fallback
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          persist-credentials: false
+
+      - name: Sign in with the Graph-only fallback identity
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ vars.CUSTOM_DETECTION_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Install the validated Bicep CLI
+        shell: pwsh
+        run: az bicep install --version v0.45.6
+
+      - name: Compile, apply, and verify custom detections
+        shell: pwsh
+        env:
+          DEPLOY_SCOPE: ${{ inputs.scope }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv
+          if (-not $token) {
+            throw 'Microsoft Graph token acquisition returned no token.'
+          }
+          Write-Output "::add-mask::$token"
+          try {
+            $env:GRAPH_ACCESS_TOKEN = $token
+            ./scripts/Deploy-CustomDetectionsGraph.ps1 -Mode Apply -Scope $env:DEPLOY_SCOPE
+          }
+          finally {
+            Remove-Item Env:GRAPH_ACCESS_TOKEN -ErrorAction SilentlyContinue
+            $token = $null
+          }

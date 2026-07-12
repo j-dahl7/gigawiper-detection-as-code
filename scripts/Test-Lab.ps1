@@ -113,6 +113,26 @@ foreach ($testName in $expectedSyntheticTests) {
     }
 }
 
+$graphFallbackFile = Join-Path $PSScriptRoot 'Deploy-CustomDetectionsGraph.ps1'
+$graphFallback = Get-Content -LiteralPath $graphFallbackFile -Raw
+$fallbackWorkflowFile = Join-Path $root '.github\workflows\graph-preview-fallback.yml'
+$fallbackWorkflow = Get-Content -LiteralPath $fallbackWorkflowFile -Raw
+$fallbackContracts = [ordered]@{
+    'manual-only workflow' = $fallbackWorkflow -match '(?m)^\s*workflow_dispatch:' -and $fallbackWorkflow -notmatch '(?m)^\s*(push|pull_request):'
+    'main-branch guard' = $fallbackWorkflow -match "github\.ref == 'refs/heads/main'"
+    'protected environment' = $fallbackWorkflow -match '(?m)^\s*environment:\s*custom-detection-fallback\s*$'
+    'OIDC without subscription RBAC' = $fallbackWorkflow -match '(?m)^\s*allow-no-subscriptions:\s*true\s*$' -and $fallbackWorkflow -notmatch '(?m)^\s*subscription-id:'
+    'pinned actions' = $fallbackWorkflow -match 'actions/checkout@[0-9a-f]{40}' -and $fallbackWorkflow -match 'azure/login@[0-9a-f]{40}'
+    'exact-ID upsert' = $graphFallback -match 'detectionRules' -and $graphFallback -match 'EscapeDataString' -and $graphFallback -match "ValidateSet\('GET', 'POST', 'PATCH'\)"
+    'no delete or pruning' = $graphFallback -notmatch "ValidateSet\([^\r\n]*'DELETE'" -and $graphFallback -notmatch '(?i)prune'
+    'app-only permission guidance' = $graphFallback -match 'CustomDetection\.ReadWrite\.All'
+}
+foreach ($contract in $fallbackContracts.GetEnumerator()) {
+    if (-not $contract.Value) {
+        throw "Graph fallback contract failed: $($contract.Key)."
+    }
+}
+
 $summary = [pscustomobject]@{
     Passed = $true
     DetectionFiles = $files.Count
@@ -122,6 +142,7 @@ $summary = [pscustomobject]@{
     InboundSecurityRules = 0
     MdeOnboardingPackage = 'ARM reference; not stored'
     SyntheticTests = $expectedSyntheticTests.Count
+    FallbackContracts = $fallbackContracts.Count
     Results = $results
 }
 
@@ -129,5 +150,5 @@ if ($Json) {
     $summary | ConvertTo-Json -Depth 5
 } else {
     $results | Format-Table -AutoSize
-    Write-Host "Validated $($files.Count) detection templates, the zero-inbound endpoint template, $($ids.Count) unique IDs, $($expectedSyntheticTests.Count) synthetic fixtures, and $($forbidden.Count) safety boundaries."
+    Write-Host "Validated $($files.Count) detection templates, the zero-inbound endpoint template, $($ids.Count) unique IDs, $($expectedSyntheticTests.Count) synthetic fixtures, $($forbidden.Count) safety boundaries, and $($fallbackContracts.Count) fallback controls."
 }
