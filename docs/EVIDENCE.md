@@ -5,6 +5,7 @@ This file separates observed evidence from planned or synthetic validation.
 | Claim | Evidence | Status | Date |
 |---|---|---|---|
 | Six templates compile with Bicep | Local `az bicep build --stdout` | Passed | 2026-07-11 |
+| Pull-request validation | GitHub Actions draft PR #1 | Passed: six detections, endpoint Bicep, stable IDs, five fixtures, and nine safety boundaries | 2026-07-11 |
 | Provider rejects a GUID beginning with a number | Live direct-Bicep canary deployment returned `Invalid rule identifier` | Observed | 2026-07-11 |
 | Stable letter-prefixed ID reaches provider | Direct-Bicep deployment reached Microsoft Security provider | Observed; provider repeatedly returned an internal error during execution | 2026-07-11 |
 | Preview accepts one tactic per rule | Graph API rejected a two-tactic rule with `Only one tactic is currently supported` | Observed; CI guard added | 2026-07-11 |
