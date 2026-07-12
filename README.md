@@ -168,7 +168,9 @@ The script creates only bounded lab artifacts:
 - a harmless scheduled task named `OneDrive Update` whose action exits;
 - a custom `NLS-GigaWiper-Lab` event log, then clears only that custom log;
 - a copy of `cmd.exe` named `mc.exe` that only prints a simulation marker;
-- eight text decoys renamed to `.candy` without encryption.
+- eight harmless copies of the signed Windows `cmd.exe` renamed from `.tmp` to
+  `.candy` without execution or encryption; this path produced observable
+  `FileRenamed` telemetry on the validated Server 2022 endpoint.
 
 Cleanup is exact-scope:
 
