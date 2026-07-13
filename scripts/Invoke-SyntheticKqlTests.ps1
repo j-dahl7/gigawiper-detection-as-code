@@ -1,12 +1,10 @@
 [CmdletBinding()]
 param(
-    [string]$AccessToken = $env:MDE_ACCESS_TOKEN,
-
-    [ValidateNotNullOrEmpty()]
-    [uri]$ApiUri = 'https://api.securitycenter.microsoft.com/api/advancedqueries/run'
+    [string]$AccessToken = $env:MDE_ACCESS_TOKEN
 )
 
 $ErrorActionPreference = 'Stop'
+$apiUri = [uri]'https://api.securitycenter.microsoft.com/api/advancedqueries/run'
 $root = Split-Path -Parent $PSScriptRoot
 $fixtureFile = Join-Path $root 'tests\synthetic-unit-tests.kql'
 $expectedTests = @(
@@ -40,7 +38,7 @@ $headers = @{
 $body = @{ Query = $query } | ConvertTo-Json -Compress
 
 try {
-    $response = Invoke-RestMethod -Method Post -Uri $ApiUri -Headers $headers -ContentType 'application/json' -Body $body
+    $response = Invoke-RestMethod -Method Post -Uri $apiUri -Headers $headers -ContentType 'application/json' -Body $body
 }
 finally {
     $AccessToken = $null

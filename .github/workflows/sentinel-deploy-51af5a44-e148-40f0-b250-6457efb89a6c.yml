@@ -51,7 +51,7 @@ jobs:
     - name: Login to Azure (Attempt 1)
       continue-on-error: true
       id: login1
-      uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
+      uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
       with:
         client-id: ${{ secrets.AZURE_SENTINEL_CLIENTID_51af5a44e14840f0b2506457efb89a6c }}
         tenant-id: ${{ secrets.AZURE_SENTINEL_TENANTID_51af5a44e14840f0b2506457efb89a6c }}
@@ -67,7 +67,7 @@ jobs:
     - name: Login to Azure (Attempt 2)
       continue-on-error: true
       id: login2
-      uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
+      uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
       if: ${{ steps.login1.outcome=='failure' }}
       with:
         client-id: ${{ secrets.AZURE_SENTINEL_CLIENTID_51af5a44e14840f0b2506457efb89a6c }}
@@ -84,7 +84,7 @@ jobs:
     - name: Login to Azure (Attempt 3)
       continue-on-error: false
       id: login3
-      uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
+      uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
       if: ${{ steps.login2.outcome=='failure'  }}
       with:
         client-id: ${{ secrets.AZURE_SENTINEL_CLIENTID_51af5a44e14840f0b2506457efb89a6c }}
@@ -102,7 +102,7 @@ jobs:
       run: az bicep install --version v0.45.6
 
     - name: Deploy Content to Microsoft Sentinel
-      uses: azure/powershell@6101bc5f8a23168669e44f7e68db621ec5ecbc6e # v2
+      uses: azure/powershell@53dd145408794f7e80f97cfcca04155c85234709 # v2
       with:
         azPSVersion: '16.1.0'
         inlineScript: |

@@ -389,9 +389,13 @@ Microsoft-generated alert.
 ## Cleanup
 
 1. Run the telemetry cleanup command above.
-2. Remove the Repository connection or deselect Custom Detection Rules if it
-   should no longer attempt native synchronization. This does not remove or
-   transfer ownership of rules created through the Graph fallback.
+2. Remove the Repository connection when native synchronization is no longer
+   required, then verify that the connection-created managed identity and its
+   Microsoft Sentinel Contributor, Logic App Contributor,
+   `CustomDetection.ReadWrite.All`, and branch-scoped GitHub OIDC grants are
+   retired. Deselecting Custom Detection Rules only stops that content type; it
+   is not identity cleanup and does not remove or transfer ownership of rules
+   created through the Graph fallback.
 3. Delete the six stable Graph-fallback IDs declared in `detections/*.bicep`
    from Defender XDR, or use an appropriately authorized Microsoft Graph
    cleanup workflow with `CustomDetection.ReadWrite.All`.
@@ -401,9 +405,10 @@ Microsoft-generated alert.
 5. Delete the dedicated `nls-gigawiper-custom-detection-fallback` app
    registration and remove its GitHub environment variables after the rules no
    longer require fallback management.
-6. Delete the dormant `nls-gigawiper-validation-20260711` diagnostic app
-   registration. It has no credential, but its tenant-wide Graph grants should
-   not remain after validation.
+6. Delete the credential-less residual `nls-gigawiper-validation-20260711`
+   diagnostic app registration. It has no password, certificate, or federated
+   credential, but its tenant-wide Graph grants should not remain after
+   validation.
 7. Delete only the disposable Azure resource group created for endpoint testing.
 
 Never use complete-mode resource-group deployment as a cleanup shortcut.

@@ -58,9 +58,26 @@ function Get-RegistryMarkerValue {
 }
 
 function Get-LabTaskXml {
-    $taskXmlText = @(& schtasks.exe /Query /TN $taskName /XML 2>$null)
-    if ($LASTEXITCODE -ne 0) {
+    try {
+        $taskMatches = @(
+            Get-ScheduledTask -TaskPath '\' -ErrorAction Stop |
+                Where-Object TaskName -CEQ $taskName
+        )
+    }
+    catch {
+        throw "Scheduled task inventory could not be queried. Refusing to treat '$taskName' as absent."
+    }
+
+    if ($taskMatches.Count -eq 0) {
         return $null
+    }
+    if ($taskMatches.Count -ne 1) {
+        throw "Scheduled task inventory returned multiple exact matches for '$taskName'. Refusing to modify them."
+    }
+
+    $taskXmlText = @(& schtasks.exe /Query /TN $taskName /XML 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Scheduled task '$taskName' exists but its XML could not be exported. Refusing to modify it."
     }
 
     try {

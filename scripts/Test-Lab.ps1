@@ -171,7 +171,9 @@ $telemetryContracts = [ordered]@{
         $firstCleanupDeletion[0] -gt $cleanupMutationMarker -and
         $cleanupBlock -match 'Test-LabTaskOwned' -and
         $cleanupBlock -match 'LogNameFromSourceName' -and
-        $cleanupBlock -match 'Test-DirectoryOwned'
+        $cleanupBlock -match 'Test-DirectoryOwned' -and
+        $telemetryScript -match 'Get-ScheduledTask' -and
+        $telemetryScript -match [regex]::Escape("Refusing to treat '`$taskName' as absent.")
     'legacy task ownership requires the registry marker' = $telemetryScript -match [regex]::Escape(
         "return (`$arguments -ceq '/c exit 0' -and `$LegacyRegistryMarkerPresent)"
     )
@@ -299,6 +301,12 @@ if ($syntheticRunnerContent -notmatch 'advancedqueries/run' -or
     $syntheticRunnerContent -notmatch '\$row\[0\]\.Passed') {
     throw 'The live synthetic KQL runner is missing its read-only execution or result assertions.'
 }
+if ($syntheticRunnerContent -match '\[uri\]\$ApiUri' -or
+    $syntheticRunnerContent -notmatch [regex]::Escape(
+        "`$apiUri = [uri]'https://api.securitycenter.microsoft.com/api/advancedqueries/run'"
+    )) {
+    throw 'The live synthetic KQL runner must send its bearer token only to the fixed Defender API endpoint.'
+}
 
 $graphFallbackFile = Join-Path $PSScriptRoot 'Deploy-CustomDetectionsGraph.ps1'
 $graphFallback = Get-Content -LiteralPath $graphFallbackFile -Raw
@@ -419,7 +427,9 @@ $workflowContracts = [ordered]@{
     'native workflow requires exact confirmation' = $nativeWorkflow -match "inputs\.confirmation == 'DEPLOY_NATIVE_SENTINEL_CONTENT'"
     'native workflow restricts deployment to main' = $nativeWorkflow -match "github\.ref == 'refs/heads/main'"
     'native workflow actions are SHA-pinned' = $nativeUses.Count -gt 0 -and
-        @($nativeUses | Where-Object { $_ -notmatch '@[0-9a-f]{40}$' }).Count -eq 0
+        @($nativeUses | Where-Object { $_ -notmatch '@[0-9a-f]{40}$' }).Count -eq 0 -and
+        ([regex]::Matches($nativeWorkflow, 'azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5')).Count -eq 3 -and
+        ([regex]::Matches($nativeWorkflow, 'azure/powershell@53dd145408794f7e80f97cfcca04155c85234709')).Count -eq 1
     'native workflow uses a fixed Az version' = $nativeWorkflow -match "(?m)^\s*azPSVersion:\s*'[0-9]+\.[0-9]+\.[0-9]+'\s*$"
     'native workflow installs the validated Bicep CLI' = $nativeWorkflow -match '(?m)^\s*run:\s*az bicep install --version v0\.45\.6\s*$'
     'native helper builds through Azure CLI Bicep' = $nativeHelper -match 'az bicep build --file \$path --stdout --only-show-errors' -and
