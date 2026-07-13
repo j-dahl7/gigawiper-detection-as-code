@@ -1,9 +1,9 @@
 # GigaWiper Detection as Code Lab
 
 Turn Microsoft's GigaWiper threat research into reviewable Microsoft Defender
-XDR custom detections, validate them without malware, and exercise the new
-Microsoft Sentinel Repositories custom-detection path with an honest preview
-fallback when the provider fails.
+XDR custom detections, validate them without malware, and exercise the Microsoft
+Sentinel Repositories custom-detection preview with a bounded Graph fallback for
+the native-path result observed in this validation.
 
 > **Safety boundary:** This lab never downloads or executes GigaWiper. It does
 > not wipe disks, encrypt files, delete boot files, disable recovery, or clear
@@ -20,7 +20,7 @@ editorial notes, see the dated
 |---|---|
 | Source control | Stable rule IDs, CODEOWNERS, pull-request validation, and Git history |
 | Bicep | Six templates compile with the Microsoft Security extension `v1.0.1` |
-| Deployment | Native Repository sync was exercised and failed in the preview provider; the manual Graph upsert succeeded as a bounded fallback |
+| Deployment | Native Repository synchronization was exercised and ended in `Failed` after provider validation returned the recorded errors; the manual Graph upsert succeeded as a bounded fallback |
 | Detection | Five enabled behavior-oriented rules plus one disabled deployment canary over Defender XDR endpoint tables |
 | Safe testing | Benign task/registry activity, a custom lab log clear, a filename-only MinIO simulation, and decoy `.candy` renames |
 | Destructive testing | Synthetic KQL fixtures only |
@@ -54,15 +54,12 @@ Merge to main (validation only)
 ```
 
 The ordinary pull-request and `main` workflows validate content but do not
-deploy it. The generated native workflow has been safety-overridden to require
-a manual dispatch and the exact confirmation `DEPLOY_NATIVE_SENTINEL_CONTENT`.
-Native Sentinel Repository synchronization is the preferred path to retest
-after the unresolved preview-path failure is understood and addressed, but it
-failed here and does not own the six rules created or updated by the Graph
-fallback. The Graph workflow is also manual-only, restricted to `main`, requires
-its own exact confirmation
-string, and exists solely because the native preview path returned a failed
-deployment in this tenant.
+deploy it. The generated native workflow is configured to require a manual
+dispatch and the exact confirmation `DEPLOY_NATIVE_SENTINEL_CONTENT`. Native
+Sentinel Repository synchronization remains the preferred path to retest. In
+this validation it ended in **Failed** and did not own the six rules later
+created or updated through the Graph fallback. The separate Graph workflow is
+manual-only, restricted to `main`, and requires its own exact confirmation.
 The native and Graph workflows now share the
 `nls-gigawiper-custom-detection-writer` concurrency group, so GitHub cannot run
 the two writer jobs simultaneously. The validated runs were also serialized:
@@ -138,7 +135,7 @@ The test compiles every Bicep file and verifies:
   and refuse to update an existing Graph rule that has response actions; and
 - no destructive commands appear in the safe telemetry script.
 
-To execute all ten fabricated positive/negative cases through Defender's
+To execute all ten constructed positive/negative cases through Defender's
 read-only Advanced Hunting API using the current Azure CLI session:
 
 ```powershell
@@ -171,7 +168,7 @@ native synchronization succeeds, treat only content actually deployed by that
 connection as Repository-managed; portal changes to such managed content can be
 overwritten by a later synchronization.
 
-### Preview provider finding — validated July 11-12, 2026
+### Observed native Repository result — validated July 11-12, 2026
 
 The connection-created identity held Microsoft Sentinel Contributor and the
 documented Microsoft Graph application permission
@@ -183,15 +180,15 @@ the provider but also returned an internal error; the separate Microsoft Graph
 path accepted and read back the corrected rules. Installing current Bicep CLI
 `v0.45.6` did not change the native result.
 
-The latest native workflow run, `29180501340`, again failed all six resources,
-and the Repository connection surfaced the final **Failed** state. This is the
-native-path evidence; it is separate from the successful manual fallback runs.
+The latest native workflow run, `29180501340`, returned the same recorded errors
+for all six resources, and the Repository connection ended in **Failed**. This
+native-path evidence is separate from the successful manual fallback runs.
 
-Adding Azure **Security Admin** did not fix the provider after a fresh login
-and a full propagation interval, so that diagnostic assignment was removed.
-Do not grant Owner or Security Admin as a workaround. Preserve the Repository
-run and tracking IDs for Microsoft support, then choose one bounded alternative
-while the preview-path root cause remains unresolved.
+A temporary Azure **Security Admin** assignment did not change the native
+deployment result after a fresh login and full propagation interval, so it was
+removed. Do not add or retain Owner or Security Admin solely to troubleshoot
+this result. Preserve the Repository run and tracking IDs for Microsoft Support
+while the preview-path root cause remains unconfirmed.
 
 ## Manual Graph preview fallback
 
@@ -218,16 +215,16 @@ were both empty for every rule. The last-run status and error fields were also
 empty. This establishes Graph scheduler metadata and execution timing, but it
 does not attribute a particular alert or incident to a Graph-fallback rule.
 
-Before the separate portal-native validation rules existed, the unified
-Defender custom-detection page did not surface the six Graph-fallback objects
-even though exact-ID Graph read-back succeeded. An exact `NLS-GW` search
-returned **0 items** and **No data available**; a screenshot of that historical
-result is captured in the companion site draft. A follow-up exact-prefix filter
-after portal-native validation returned exactly three rows, all of them the
-separate `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004` objects.
-None of the six Graph-fallback rules appeared. Their portal-list visibility
-therefore remains pending, and the evidence does not yet distinguish preview
-replication behavior from portal authorization or UI filtering.
+Before the separate portal-native validation rules existed, an exact `NLS-GW`
+search in the unified Defender custom-detection page returned **0 items** and
+**No data available**, while exact-ID Graph read-back succeeded. A screenshot of
+that historical result is captured in the companion site draft. A follow-up
+exact-prefix filter after portal-native validation returned exactly three rows,
+all of them the separate `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and
+`NLS-GW-LIVE-004` objects. None of the six Graph-fallback rules appeared. Their
+portal-list visibility therefore remains pending, and the evidence does not yet
+distinguish preview replication behavior from portal authorization or UI
+filtering.
 
 Before the separate portal-native canary was created on July 12, an exact
 `NLS-GW` incident search found zero incidents and a 24-hour Advanced Hunting
@@ -270,8 +267,8 @@ forking the lab into another tenant.
 To validate the live rule engine independently of both preview deployment
 paths, three separate alert-only rules were created manually in the Defender
 portal with the exact repository queries current at validation time. All three
-targeted all devices, had zero automated response actions, and produced genuine
-**Custom detection** / **Microsoft Defender for Endpoint** alerts:
+targeted all devices and had zero automated response actions. Defender generated
+the following **Custom detection** / **Microsoft Defender for Endpoint** alerts:
 
 | Portal rule | Validation query and schedule | Live result |
 |---|---|---|
@@ -279,10 +276,10 @@ targeted all devices, had zero automated response actions, and produced genuine
 | `NLS-GW-LIVE-003` (rule `153`) | Then-current exact NLS-GW-003 scheduled query; created July 12 at `09:53:08` in the portal's UTC-5 display | High-severity Defense Evasion alert `ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml`, linked to incident `628` at `10:00:38`; last run `10:53:08` **Completed**, next run `11:53:08` |
 | `NLS-GW-LIVE-004` | Then-current exact NLS-GW-004 Continuous (NRT) query; created July 12 at `12:30:02Z` | Medium-severity Exfiltration alert `eda016b9bd-4631-44d3-baa6-314b4f7ed032_aml`, linked to incident `628` at `12:33Z` |
 
-The 001 and 003 alerts came from genuine initial scheduled evaluations over the
-previously generated benign endpoint telemetry. They were not fabricated
-alerts and no new harmful behavior was executed to produce them. For 004, a
-safe post-creation marker completed at `12:30:45Z` with
+The 001 and 003 alerts came from the documented initial scheduled evaluations
+over previously generated benign endpoint telemetry; no harmful behavior was
+executed to obtain them. For 004, a safe post-creation marker completed at
+`12:30:45Z` with
 `NetworkTransfer=False`; Defender displayed first activity as
 `2026-07-11 19:47:54` and last activity as `2026-07-12 07:30:45` in the tenant's
 local-time display, with the last activity matching that safe marker.
@@ -304,10 +301,10 @@ NLS-GW-005 has an explicit boundary. Its exact checked-in aggregation and a
 raw-row adapter both returned live `DeviceFileEvents` data, but fresh unified
 custom-detection wizards repeatedly displayed **Supported entities could not be
 loaded** and left **Add assets** disabled. No portal-native 005 rule was created,
-and no 005 alert is claimed. This is an observed portal/session failure with no
-assigned root cause, not proof that aggregate custom detections or NLS-GW-005
-are unsupported. The live portal screenshots are stored with the companion blog
-draft.
+and no 005 alert is claimed. This is recorded as an observed wizard outcome with
+no assigned root cause, not as evidence that aggregate custom detections or
+NLS-GW-005 are unsupported. The live portal screenshots are stored with the
+companion blog draft.
 
 ## Direct Bicep alternative
 
@@ -382,7 +379,7 @@ artifacts. It refuses same-name objects with unrecognized content.
 | Synthetic query test | `datatable()` fixtures validate logic without performing the action |
 | Query guidance only | Useful hunt not claimed as a deployed alert |
 
-Synthetic query output is never presented as a genuine Defender alert. Built-in
+Synthetic query output is never presented as a Defender-generated alert. Built-in
 Microsoft GigaWiper detections are not claimed as reproduced without a real
 Microsoft-generated alert.
 

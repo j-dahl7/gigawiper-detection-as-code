@@ -6,7 +6,7 @@ This file separates observed evidence from planned or synthetic validation.
 > process/registry time correlation, and NLS-GW-005 now evaluates an optimized
 > five-minute time-key window join. Both current queries were re-run read-only
 > against the retained live telemetry on July 12 and returned the same expected
-> one-row results (NLS-GW-005 retained `CandyFileCount=7`). The genuine LIVE-001
+> one-row results (NLS-GW-005 retained `CandyFileCount=7`). The LIVE-001
 > alert remains evidence for the then-checked-in query revision used by portal
 > rule 152; no new alert is attributed to the hardened revision. This remediation
 > was not applied to the six live Graph-fallback objects, so their retained
@@ -16,15 +16,15 @@ This file separates observed evidence from planned or synthetic validation.
 |---|---|---|---|
 | Six templates compile with Bicep | Local `az bicep build --stdout` | Passed | 2026-07-11 |
 | Pull-request validation | GitHub Actions draft PR #1 | Passed: six detections, endpoint Bicep, stable IDs, five fixtures, and nine safety boundaries | 2026-07-11 |
-| Provider rejects a GUID beginning with a number | Live direct-Bicep canary deployment returned `Invalid rule identifier` | Observed | 2026-07-11 |
-| Stable letter-prefixed ID reaches provider | Direct-Bicep deployment reached Microsoft Security provider | Observed; provider repeatedly returned an internal error during execution | 2026-07-11 |
+| Live provider validation rejected a GUID-form ID beginning with a digit | Live direct-Bicep canary deployment returned `Invalid rule identifier` | Observed | 2026-07-11 |
+| Stable letter-prefixed ID reaches provider | Direct-Bicep deployment reached Microsoft Security provider | Observed; repeated deployment attempts returned the recorded internal error during execution | 2026-07-11 |
 | Preview accepts one tactic per rule | Graph API rejected a two-tactic rule with `Only one tactic is currently supported` | Observed; CI guard added | 2026-07-11 |
 | Rule engine accepts corrected pack | Graph API create/read/delete round trip, then live validation deployment | Passed: five enabled rules, one disabled canary, zero response actions | 2026-07-11 |
 | Native Sentinel Repository connection | Source Controls API plus generated OIDC workflow and repository commits | Connected to `main` with `CustomDetection`; Defender portal shows the correct content type | 2026-07-11 |
-| Native Sentinel Repository synchronization | Generated GitHub workflow runs `29178665606` and `29180501340` | Observed preview failure: the latest run again returned `InvalidTemplateDeployment` / inner `ProviderError` for all six exact templates; the Repository connection now visibly reports `Failed` | 2026-07-12 |
+| Native Sentinel Repository synchronization | Generated GitHub workflow runs `29178665606` and `29180501340` | Observed: the latest run returned `InvalidTemplateDeployment` / inner `ProviderError` for all six exact templates; the Repository connection reports `Failed` | 2026-07-12 |
 | Repository identity authorization | Token-safe diagnostic using the connection identity | Passed: app-only token contained `CustomDetection.ReadWrite.All`, exact Graph GET returned 200, and Azure deployment rights were present | 2026-07-11 |
-| Provider-versus-Graph isolation | Same connection identity, same rule ID | Provider validation failed internally while direct Graph authorization succeeded; current Microsoft documentation lists no additional app-only role | 2026-07-11 |
-| Broad-role diagnostic | Temporary Azure Security Admin at the exact resource-group scope | Did not change the failure after a fresh login and full propagation interval; assignment removed | 2026-07-11 |
+| Native/Graph path comparison | Same connection identity, same rule ID | Native validation returned the recorded internal error; the same identity completed an exact Graph GET; no additional app-only role was identified in the referenced documentation | 2026-07-11 |
+| Additional-role diagnostic | Temporary Azure Security Admin at the exact resource-group scope | Did not change the result after a fresh login and full propagation interval; assignment removed | 2026-07-11 |
 | Graph fallback canary | Manual workflow run `29180371449` | Passed: exact canary ID updated/read back, disabled, with zero response actions | 2026-07-12 |
 | Graph fallback full pack | Manual workflow run `29180593038` | Passed: all six exact IDs updated/read back; canary disabled, five behavior rules enabled, and zero response actions on every rule | 2026-07-12 |
 | Graph fallback scheduler inspection | Read-only workflow runs `29193356536` and `29193929962` | Observed: the post-telemetry recheck showed all five enabled rules at frequency `PT1H`, with `lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime` `2026-07-12T14:09:25.6533333Z`; last-run status and error fields were empty, the disabled canary remained disabled, and all rules had zero current `automatedActions` plus zero deprecated `responseActions` | 2026-07-12 |
@@ -40,9 +40,9 @@ This file separates observed evidence from planned or synthetic validation.
 | Synthetic query fixtures | Live Advanced Hunting execution of `tests/synthetic-unit-tests.kql` | Passed after audit hardening: ten named result rows, five positive and five negative, using normalized exact copies of the current compiled queries; exercises all five recovery/boot branches, both event-log branches, all four MinIO branches, a multi-process persistence regression, and a clock-boundary `.candy` burst | 2026-07-12 |
 | Pre-canary custom-alert check | Defender XDR Incidents and Advanced Hunting `AlertInfo` | Observed before the portal-native canary was created: an exact `NLS-GW` incident search returned zero incidents, and a 24-hour query for `Title startswith "NLS-GW"` or `DetectionSource contains "Custom"` returned no results | 2026-07-12 |
 | Portal-native scheduled NLS-GW-001 rule | Defender unified custom-detection page, rule `152` | Passed: created July 12 at `09:39:42` in the portal's UTC-5 display with the then-checked-in scheduled query; High severity, Persistence, all devices, zero automated response actions; last run `10:39:42` **Completed**, next run `11:39:42` | 2026-07-12 |
-| Portal-native NLS-GW-001 alert | Defender XDR alert page | Passed: genuine initial scheduled evaluation over previously generated benign telemetry produced **Custom detection** / **Microsoft Defender for Endpoint** alert `ede0f56adf-2532-41c2-98a8-ac08a2481201_aml`, linked to incident `628` at `09:46:42` in the portal's UTC-5 display | 2026-07-12 |
+| Portal-native NLS-GW-001 alert | Defender XDR alert page | Passed: initial scheduled evaluation over previously generated benign telemetry produced **Custom detection** / **Microsoft Defender for Endpoint** alert `ede0f56adf-2532-41c2-98a8-ac08a2481201_aml`, linked to incident `628` at `09:46:42` in the portal's UTC-5 display | 2026-07-12 |
 | Portal-native scheduled NLS-GW-003 rule | Defender unified custom-detection page, rule `153` | Passed: created July 12 at `09:53:08` in the portal's UTC-5 display with the exact checked-in scheduled query; High severity, Defense Evasion, all devices, zero automated response actions; last run `10:53:08` **Completed**, next run `11:53:08` | 2026-07-12 |
-| Portal-native NLS-GW-003 alert | Defender XDR alert page | Passed: genuine initial scheduled evaluation over previously generated benign telemetry produced **Custom detection** / **Microsoft Defender for Endpoint** alert `ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml`, linked to incident `628` at `10:00:38` in the portal's UTC-5 display | 2026-07-12 |
+| Portal-native NLS-GW-003 alert | Defender XDR alert page | Passed: initial scheduled evaluation over previously generated benign telemetry produced **Custom detection** / **Microsoft Defender for Endpoint** alert `ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml`, linked to incident `628` at `10:00:38` in the portal's UTC-5 display | 2026-07-12 |
 | Portal-native NRT canary | Defender unified custom-detection page | Passed: alert-only Continuous (NRT) canary `NLS-GW-LIVE-004` was created at `12:30:02Z` with the exact NLS-GW-004 query; status **Enabled** / **Running**, all devices, and zero response actions | 2026-07-12 |
 | Post-creation safe marker | Azure managed Run Command and Defender endpoint telemetry | Passed: marker completed at `12:30:45Z` with `NetworkTransfer=False` | 2026-07-12 |
 | Portal-native NLS-GW-004 alert | Defender XDR alert page | Passed: at `12:33Z`, after the safe post-creation marker, Defender produced medium-severity Exfiltration **Custom detection** / **Microsoft Defender for Endpoint** alert `eda016b9bd-4631-44d3-baa6-314b4f7ed032_aml` and linked it to incident `628`; the alert's first activity predated rule creation and its last activity `2026-07-12 07:30:45` matched the marker | 2026-07-12 |
@@ -67,29 +67,29 @@ objects. The live Graph rule API returned `InvalidInput` because the preview
 currently accepts only one tactic per rule. The pack now keeps the primary
 tactic for each rule and `Test-Lab.ps1` enforces that runtime contract.
 
-## Repository preview provider finding
+## Native Repository deployment observations
 
-The Repository connection itself is valid: it targets `main`, selects
-`CustomDetection`, creates the expected OIDC deployment workflow, and provisions
-an identity with Microsoft Sentinel Contributor plus the documented Graph
-application permission `CustomDetection.ReadWrite.All`. A token-safe diagnostic
-confirmed that the exact identity could call the custom-detection Graph API.
+The Repository connection targeted `main` and selected `CustomDetection`. Its
+setup created the expected OIDC deployment workflow and provisioned an identity
+with Microsoft Sentinel Contributor plus the documented Graph application
+permission `CustomDetection.ReadWrite.All`. A token-safe diagnostic confirmed
+that the exact identity could call the custom-detection Graph API.
 
-Despite that, native workflow run `29178665606` failed all six resources during
-three provider-validation attempts, and the later run `29180501340` again failed
-all six with `InvalidTemplateDeployment` and an inner `ProviderError:
+Native workflow run `29178665606` failed all six resources during three
+provider-validation attempts, and the later run `29180501340` returned the same
+result for all six with `InvalidTemplateDeployment` and an inner `ProviderError:
 Encountered internal server error`. The Repository connection now visibly
 reports **Failed**. Delegated direct deployment of the same compiled Bicep also
 reached the provider and returned an internal error, while a separate direct
 Graph GET retrieved the disabled canary by stable ID. Reproducing with Bicep
 CLI `v0.45.6` excluded the runner's older compiler as the cause.
 
-A temporary Azure Security Admin assignment was used only to falsify the
-missing-Azure-role hypothesis. It did not change the result after propagation
-and was removed. No current Microsoft documentation requires that broad role
-for the app-only custom-detection path. The evidence is consistent with a
-Microsoft Security provider/app-only path issue after the documented
-prerequisites were met, but the root cause remains unconfirmed. Preserve the
+A temporary Azure Security Admin assignment was used to test whether an
+additional Azure role changed the outcome. It did not change the result after
+propagation and was removed. The referenced prerequisites did not identify an
+additional Azure role for this app-only path. These observations locate the
+unsuccessful result at the native deployment stage after the documented
+prerequisites were met; the root cause remains unconfirmed. Preserve the
 Repository run and tracking IDs for Microsoft Support.
 
 The bounded fallback uses a separate Graph-only application with no Azure role
@@ -149,15 +149,15 @@ at `09:39:42` in the portal's UTC-5 display. Its High-severity Persistence alert
 `10:00:38`; its last run at `10:53:08` was **Completed**, with the next run at
 `11:53:08`.
 
-Those two alerts were genuine initial scheduled evaluations over previously
-generated benign endpoint telemetry, not fabricated alerts or newly executed
-harmful behavior. Separately, the Continuous (NRT) rule `NLS-GW-LIVE-004` was
+Those two alerts resulted from the documented initial scheduled evaluations over
+previously generated benign endpoint telemetry; no harmful behavior was newly
+executed. Separately, the Continuous (NRT) rule `NLS-GW-LIVE-004` was
 created at `12:30:02Z`. A safe post-creation marker completed at `12:30:45Z`
 with `NetworkTransfer=False`; at `12:33Z`, Defender generated medium-severity
 Exfiltration alert `eda016b9bd-4631-44d3-baa6-314b4f7ed032_aml`. The tenant-local
 display showed first activity `2026-07-11 19:47:54`, which predated rule
 creation, and last activity `2026-07-12 07:30:45`, which matched the safe
-marker. This proves the genuine NRT alert incorporated a post-rule event; it
+marker. This establishes that the NRT alert incorporated a post-rule event; it
 does not establish that the marker was the alert's sole cause.
 
 All three are **Custom detection** / **Microsoft Defender for Endpoint** alerts,
@@ -175,10 +175,10 @@ NLS-GW-005 remains an explicit boundary. Its exact checked-in aggregation and a
 raw-row adapter both returned live `DeviceFileEvents` data, but repeated fresh
 unified custom-detection wizards displayed `Supported entities could not be
 loaded` and left **Add assets** disabled. No 005 portal rule was created, and no
-005 alert exists or is claimed. This is recorded as an observed portal/session
-failure with no assigned root cause, not as proof that aggregate custom
-detections or NLS-GW-005 are unsupported. Screenshots of the live portal
-evidence are stored with the companion blog draft.
+005 alert exists or is claimed. This is recorded as an observed wizard outcome
+with no assigned root cause, not as evidence that aggregate custom detections or
+NLS-GW-005 are unsupported. Screenshots of the live portal evidence are stored
+with the companion blog draft.
 
 ## Endpoint activation finding
 
@@ -207,7 +207,7 @@ in harness uses this observed path and still retains synthetic fixtures.
 ## Evidence levels
 
 - **Passed:** directly validated with the named tool or live platform.
-- **Observed:** platform behavior captured, including an expected failure.
-- **Synthetic:** query logic tested with fabricated rows only.
+- **Observed:** platform behavior captured, including a recorded failure state.
+- **Synthetic:** query logic tested with constructed rows only.
 - **Pending:** no public claim should be made until evidence is captured.
 - **Not claimed:** deliberately outside the safety or access boundary.
