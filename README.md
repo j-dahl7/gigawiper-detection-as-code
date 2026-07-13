@@ -34,13 +34,13 @@ Pull request
 GitHub Actions: Bicep compile + ID/query/safety checks
     |
     v
-Merge to main
+Merge to main (validation only)
     |
-    +--> Native Sentinel Repository sync (Preview)
+    +--> Manual native Sentinel Repository retry (Preview; exact confirmation)
     |        |
     |        +--> FAILED: provider error before Repository ownership
     |
-    +--> Manual Graph fallback (only while native sync is idle)
+    +--> Manual Graph fallback (shared cross-workflow writer lock)
              |
              v
          GitHub OIDC --> exact-ID create/update + read-back
@@ -53,17 +53,24 @@ Merge to main
              +--> Graph-rule alert attribution not established
 ```
 
-The ordinary pull-request workflow validates content but does not deploy it.
+The ordinary pull-request and `main` workflows validate content but do not
+deploy it. The generated native workflow has been safety-overridden to require
+a manual dispatch and the exact confirmation `DEPLOY_NATIVE_SENTINEL_CONTENT`.
 Native Sentinel Repository synchronization is the preferred path to retest
-after Microsoft corrects the preview provider, but it failed here and does not
-own the six rules created or updated by the Graph fallback. The Graph workflow
-is manual-only, restricted to `main`, requires an exact confirmation string,
-and exists solely because the July 2026 preview provider failed in this tenant.
-The validated runs were serialized: the canary fallback completed, the latest
-native retry then completed in **Failed**, and the full-pack fallback began only
+after the unresolved preview-path failure is understood and addressed, but it
+failed here and does not own the six rules created or updated by the Graph
+fallback. The Graph workflow is also manual-only, restricted to `main`, requires
+its own exact confirmation
+string, and exists solely because the native preview path returned a failed
+deployment in this tenant.
+The native and Graph workflows now share the
+`nls-gigawiper-custom-detection-writer` concurrency group, so GitHub cannot run
+the two writer jobs simultaneously. The validated runs were also serialized:
+the canary fallback completed, the latest native retry then completed in
+**Failed**, and the full-pack fallback began only
 after that retry ended. The paths were never concurrent. Keep that separation
-when retesting: never run the native and fallback deployment paths at the same
-time.
+when retesting; the lock prevents overlap, but it does not decide which path
+should own the rules.
 
 ## Detection pack
 
@@ -74,7 +81,7 @@ time.
 | `nls-gw-002-recovery-boot-tampering` | Recovery and boot command patterns | Single-table scheduled rule | Destructive preparation | Enabled |
 | `nls-gw-003-event-log-destruction` | `wevtutil` log clearing | Single-table scheduled rule | Defense evasion | Enabled |
 | `nls-gw-004-minio-transfer-staging` | Unusual `mc.exe` transfer arguments | Single-table scheduled rule | Exfiltration staging | Enabled |
-| `nls-gw-005-candy-rename-burst` | Burst of `.candy` file renames | Single-table aggregation | Impact confirmation | Enabled |
+| `nls-gw-005-candy-rename-burst` | Five `.candy` renames within any five-minute window | Optimized time-key window join | Impact-stage signal | Enabled |
 
 All six exact IDs were read back after the successful fallback deployment.
 Every rule had zero automated response actions; the canary remained disabled.
@@ -116,11 +123,30 @@ The test compiles every Bicep file and verifies:
 
 - stable IDs begin with a letter and stay within the provider's character rules;
 - IDs and display names are unique;
-- every query returns `Timestamp`, `DeviceId`, and `ReportId`;
+- every compiled query's final projection returns `Timestamp`, `DeviceId`, and `ReportId`;
 - each preview rule declares no more than one MITRE tactic;
-- automated response actions are absent;
-- all five behavior rules have named synthetic fixtures;
+- compiled `detectionAction` objects contain neither current
+  `automatedActions` nor deprecated `responseActions` keys;
+- all five behavior rules are copied exactly into positive and negative
+  synthetic fixture contracts, including every recovery, log-clear, and MinIO
+  command branch;
+- NLS-GW-005 retains an exact five-minute sliding window through bounded
+  `range()` / `mv-expand` time keys instead of a device-wide cross join;
+- safe telemetry generation refuses collisions, validates ownership before
+  cleanup, removes only its registry marker value, and checks native exit codes;
+- native and fallback writers are manual, mutually serialized, version-pinned,
+  and refuse to update an existing Graph rule that has response actions; and
 - no destructive commands appear in the safe telemetry script.
+
+To execute all ten fabricated positive/negative cases through Defender's
+read-only Advanced Hunting API using the current Azure CLI session:
+
+```powershell
+./scripts/Invoke-SyntheticKqlTests.ps1
+```
+
+This command submits only `datatable()` rows. It creates no endpoint activity,
+rule, alert, incident, or tenant object.
 
 The disposable endpoint template obtains the MDE onboarding payload at deploy
 time from `Microsoft.Security/mdeOnboardings/Windows`. The protected payload is
@@ -133,7 +159,8 @@ never written to the repository, test output, or deployment outputs.
    management** > **Repositories**.
 3. Create or edit the Repository connection.
 4. Select **Custom Detection Rules** as a content type.
-5. Point the connection at this repository and merge a validated pull request.
+5. Disable the Graph fallback, then manually dispatch the generated native
+   workflow from `main` with `DEPLOY_NATIVE_SENTINEL_CONTENT`.
 6. Inspect the synchronization result before confirming rules under **Hunting**
    > **Custom detection rules**.
 
@@ -191,13 +218,16 @@ were both empty for every rule. The last-run status and error fields were also
 empty. This establishes Graph scheduler metadata and execution timing, but it
 does not attribute a particular alert or incident to a Graph-fallback rule.
 
-The unified Defender custom-detection page did not surface the six `NLS-GW`
-objects during the July 12 validation window even though exact-ID Graph
-read-back succeeded. An exact `NLS-GW` search returned **0 items** and **No data
-available**; a screenshot of that observed result is captured in the companion
-site draft. Portal-list visibility therefore remains pending. The evidence does
-not yet distinguish preview replication behavior from portal authorization or
-UI filtering.
+Before the separate portal-native validation rules existed, the unified
+Defender custom-detection page did not surface the six Graph-fallback objects
+even though exact-ID Graph read-back succeeded. An exact `NLS-GW` search
+returned **0 items** and **No data available**; a screenshot of that historical
+result is captured in the companion site draft. A follow-up exact-prefix filter
+after portal-native validation returned exactly three rows, all of them the
+separate `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004` objects.
+None of the six Graph-fallback rules appeared. Their portal-list visibility
+therefore remains pending, and the evidence does not yet distinguish preview
+replication behavior from portal authorization or UI filtering.
 
 Before the separate portal-native canary was created on July 12, an exact
 `NLS-GW` incident search found zero incidents and a 24-hour Advanced Hunting
@@ -239,15 +269,15 @@ forking the lab into another tenant.
 
 To validate the live rule engine independently of both preview deployment
 paths, three separate alert-only rules were created manually in the Defender
-portal with exact queries from this repository. All three targeted all devices,
-had zero automated response actions, and produced genuine **Custom detection** /
-**Microsoft Defender for Endpoint** alerts:
+portal with the exact repository queries current at validation time. All three
+targeted all devices, had zero automated response actions, and produced genuine
+**Custom detection** / **Microsoft Defender for Endpoint** alerts:
 
-| Portal rule | Checked-in query and schedule | Live result |
+| Portal rule | Validation query and schedule | Live result |
 |---|---|---|
-| `NLS-GW-LIVE-001` (rule `152`) | Exact NLS-GW-001 scheduled query; created July 12 at `09:39:42` in the portal's UTC-5 display | High-severity Persistence alert `ede0f56adf-2532-41c2-98a8-ac08a2481201_aml`, linked to incident `628` at `09:46:42`; last run `10:39:42` **Completed**, next run `11:39:42` |
-| `NLS-GW-LIVE-003` (rule `153`) | Exact NLS-GW-003 scheduled query; created July 12 at `09:53:08` in the portal's UTC-5 display | High-severity Defense Evasion alert `ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml`, linked to incident `628` at `10:00:38`; last run `10:53:08` **Completed**, next run `11:53:08` |
-| `NLS-GW-LIVE-004` | Exact NLS-GW-004 Continuous (NRT) query; created July 12 at `12:30:02Z` | Medium-severity Exfiltration alert `eda016b9bd-4631-44d3-baa6-314b4f7ed032_aml`, linked to incident `628` at `12:33Z` |
+| `NLS-GW-LIVE-001` (rule `152`) | Validation-revision NLS-GW-001 scheduled query; created July 12 at `09:39:42` in the portal's UTC-5 display | High-severity Persistence alert `ede0f56adf-2532-41c2-98a8-ac08a2481201_aml`, linked to incident `628` at `09:46:42`; last run `10:39:42` **Completed**, next run `11:39:42` |
+| `NLS-GW-LIVE-003` (rule `153`) | Then-current exact NLS-GW-003 scheduled query; created July 12 at `09:53:08` in the portal's UTC-5 display | High-severity Defense Evasion alert `ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml`, linked to incident `628` at `10:00:38`; last run `10:53:08` **Completed**, next run `11:53:08` |
+| `NLS-GW-LIVE-004` | Then-current exact NLS-GW-004 Continuous (NRT) query; created July 12 at `12:30:02Z` | Medium-severity Exfiltration alert `eda016b9bd-4631-44d3-baa6-314b4f7ed032_aml`, linked to incident `628` at `12:33Z` |
 
 The 001 and 003 alerts came from genuine initial scheduled evaluations over the
 previously generated benign endpoint telemetry. They were not fabricated
@@ -258,9 +288,13 @@ safe post-creation marker completed at `12:30:45Z` with
 local-time display, with the last activity matching that safe marker.
 
 The three alert detail pages now show incident `628` at High severity with
-**Active alerts 3/3**. This proves the exact checked-in queries, real endpoint
-telemetry, scheduled and Continuous (NRT) evaluation, alert creation, and
-incident correlation for the separate portal-native rules. It does **not**
+**Active alerts 3/3**. This proves the validation-time query revisions, real
+endpoint telemetry, scheduled and Continuous (NRT) evaluation, alert creation,
+and incident correlation for the separate portal-native rules. The current
+hardened NLS-GW-001 and NLS-GW-005 queries were separately re-run against the
+retained telemetry and each returned the expected single row; no new alert is
+attributed to those revisions, and the six live Graph-fallback objects were not
+mutated during remediation. This evidence does **not**
 attribute any alert or incident to the native Repository path or a
 Graph-fallback object. The later read-only Graph inspection independently
 established hourly scheduler execution timing for the five enabled fallback
@@ -335,6 +369,10 @@ Cleanup is exact-scope:
 ./scripts/Invoke-SafeGigaWiperTelemetry.ps1 -CleanupOnly
 ```
 
+Cleanup first validates every task, event-log, directory, and marker ownership
+signal, then removes only the exact registry marker value and owned lab
+artifacts. It refuses same-name objects with unrecognized content.
+
 ## Validation levels
 
 | Level | Meaning |
@@ -360,7 +398,13 @@ Microsoft-generated alert.
 4. Separately delete the portal-native `NLS-GW-LIVE-001`,
    `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004` rules. They are not among the six
    Graph-fallback IDs.
-5. Delete only the disposable Azure resource group created for endpoint testing.
+5. Delete the dedicated `nls-gigawiper-custom-detection-fallback` app
+   registration and remove its GitHub environment variables after the rules no
+   longer require fallback management.
+6. Delete the dormant `nls-gigawiper-validation-20260711` diagnostic app
+   registration. It has no credential, but its tenant-wide Graph grants should
+   not remain after validation.
+7. Delete only the disposable Azure resource group created for endpoint testing.
 
 Never use complete-mode resource-group deployment as a cleanup shortcut.
 

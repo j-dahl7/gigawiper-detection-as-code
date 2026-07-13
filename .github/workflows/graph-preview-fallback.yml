@@ -32,7 +32,9 @@ env:
   AZURE_CORE_OUTPUT: none
 
 concurrency:
-  group: custom-detection-preview-fallback
+  # Shared with the native Repository workflow so the two potential writers
+  # cannot execute concurrently even if both are manually dispatched.
+  group: nls-gigawiper-custom-detection-writer
   cancel-in-progress: false
 
 jobs:

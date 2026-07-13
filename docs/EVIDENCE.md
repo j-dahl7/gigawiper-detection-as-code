@@ -2,6 +2,16 @@
 
 This file separates observed evidence from planned or synthetic validation.
 
+> **Post-audit hardening:** NLS-GW-001 now deduplicates only after a valid
+> process/registry time correlation, and NLS-GW-005 now evaluates an optimized
+> five-minute time-key window join. Both current queries were re-run read-only
+> against the retained live telemetry on July 12 and returned the same expected
+> one-row results (NLS-GW-005 retained `CandyFileCount=7`). The genuine LIVE-001
+> alert remains evidence for the then-checked-in query revision used by portal
+> rule 152; no new alert is attributed to the hardened revision. This remediation
+> was not applied to the six live Graph-fallback objects, so their retained
+> deployment read-back remains evidence for the validation revision.
+
 | Claim | Evidence | Status | Date |
 |---|---|---|---|
 | Six templates compile with Bicep | Local `az bicep build --stdout` | Passed | 2026-07-11 |
@@ -20,15 +30,16 @@ This file separates observed evidence from planned or synthetic validation.
 | Graph fallback scheduler inspection | Read-only workflow runs `29193356536` and `29193929962` | Observed: the post-telemetry recheck showed all five enabled rules at frequency `PT1H`, with `lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime` `2026-07-12T14:09:25.6533333Z`; last-run status and error fields were empty, the disabled canary remained disabled, and all rules had zero current `automatedActions` plus zero deprecated `responseActions` | 2026-07-12 |
 | Dedicated Graph fallback identity | Entra app-role and Azure RBAC audits plus GitHub OIDC configuration | Passed: only Graph application permission `CustomDetection.ReadWrite.All`, environment-scoped federated OIDC, no stored client secret, and zero Azure role assignments | 2026-07-12 |
 | Deployment-path sequencing | GitHub Actions run order and completion timestamps | Passed: canary run `29180371449` completed, native retry `29180501340` then completed in `Failed`, and full-pack run `29180593038` began afterward; native and fallback paths were never concurrent | 2026-07-12 |
+| Post-audit writer serialization | Local workflow contracts | Passed locally: both deployment workflows are manual and confirmation-gated, share the exact `nls-gigawiper-custom-detection-writer` concurrency group with `cancel-in-progress: false`, and therefore cannot execute their writer jobs concurrently after these changes are published | 2026-07-12 |
 | Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six current rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
-| Defender portal rule-list visibility | Unified custom-detection page searched by exact `NLS-GW` prefix after successful Graph read-back | Pending: the page returned **0 items** / **No data available**; a screenshot of the observed result is captured in the companion site draft, but no cause is claimed | 2026-07-12 |
+| Defender portal rule-list visibility | Unified custom-detection page searched by exact `NLS-GW` prefix before and after the separate portal-native validation rules were created | Observed, cause pending: the historical pre-portal check returned **0 items** / **No data available**; the follow-up filter returned exactly three rows, all of them `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004`. None of the six Graph-fallback objects appeared, and no cause is claimed. | 2026-07-12 |
 | Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default inbound deny with no custom inbound NSG rules | 2026-07-11 |
 | Safe endpoint jobs executed | Azure managed Run Command instance views | Passed: task/registry, custom-log clear, filename-only `mc.exe`, and eight decoy renames all exited 0 | 2026-07-11 |
 | Live KQL validation | Defender XDR Advanced Hunting using the exact checked-in queries | Passed for NLS-GW-001, NLS-GW-003, NLS-GW-004, and NLS-GW-005 against real benign events; a July 12 12-hour `DeviceProcessEvents` recheck returned two real `mc.exe` rows on `nls-gw-lab`, including the safe marker text, from a harness that performed no network transfer | 2026-07-12 |
 | `.candy` rename collection | Three bounded decoy runs on Windows Server 2022 | Passed after ingestion delay: seven `FileRenamed` rows surfaced from the Public Documents copy-plus-move variant and satisfied the five-in-five-minutes threshold | 2026-07-11 |
-| Synthetic query fixtures | Live Advanced Hunting execution of `tests/synthetic-unit-tests.kql` | Passed: five named test rows, including recovery tampering and `.candy` aggregation | 2026-07-11 |
+| Synthetic query fixtures | Live Advanced Hunting execution of `tests/synthetic-unit-tests.kql` | Passed after audit hardening: ten named result rows, five positive and five negative, using normalized exact copies of the current compiled queries; exercises all five recovery/boot branches, both event-log branches, all four MinIO branches, a multi-process persistence regression, and a clock-boundary `.candy` burst | 2026-07-12 |
 | Pre-canary custom-alert check | Defender XDR Incidents and Advanced Hunting `AlertInfo` | Observed before the portal-native canary was created: an exact `NLS-GW` incident search returned zero incidents, and a 24-hour query for `Title startswith "NLS-GW"` or `DetectionSource contains "Custom"` returned no results | 2026-07-12 |
-| Portal-native scheduled NLS-GW-001 rule | Defender unified custom-detection page, rule `152` | Passed: created July 12 at `09:39:42` in the portal's UTC-5 display with the exact checked-in scheduled query; High severity, Persistence, all devices, zero automated response actions; last run `10:39:42` **Completed**, next run `11:39:42` | 2026-07-12 |
+| Portal-native scheduled NLS-GW-001 rule | Defender unified custom-detection page, rule `152` | Passed: created July 12 at `09:39:42` in the portal's UTC-5 display with the then-checked-in scheduled query; High severity, Persistence, all devices, zero automated response actions; last run `10:39:42` **Completed**, next run `11:39:42` | 2026-07-12 |
 | Portal-native NLS-GW-001 alert | Defender XDR alert page | Passed: genuine initial scheduled evaluation over previously generated benign telemetry produced **Custom detection** / **Microsoft Defender for Endpoint** alert `ede0f56adf-2532-41c2-98a8-ac08a2481201_aml`, linked to incident `628` at `09:46:42` in the portal's UTC-5 display | 2026-07-12 |
 | Portal-native scheduled NLS-GW-003 rule | Defender unified custom-detection page, rule `153` | Passed: created July 12 at `09:53:08` in the portal's UTC-5 display with the exact checked-in scheduled query; High severity, Defense Evasion, all devices, zero automated response actions; last run `10:53:08` **Completed**, next run `11:53:08` | 2026-07-12 |
 | Portal-native NLS-GW-003 alert | Defender XDR alert page | Passed: genuine initial scheduled evaluation over previously generated benign telemetry produced **Custom detection** / **Microsoft Defender for Endpoint** alert `ed1f17e8f7-3600-4c97-867e-b6bd1c987c37_aml`, linked to incident `628` at `10:00:38` in the portal's UTC-5 display | 2026-07-12 |
@@ -85,7 +96,10 @@ The bounded fallback uses a separate Graph-only application with no Azure role
 assignments. Its workflow is manual, restricted to `main`, compiles the same
 Bicep source, creates or updates only the six stable IDs, performs no deletion,
 and verifies each rule by exact ID. Native Repository synchronization and the
-fallback must not run concurrently.
+fallback must not run concurrently. The post-audit workflow revisions enforce
+that invariant with a shared GitHub concurrency group. Serialization prevents
+overlapping writers; it does not choose an owner or make a queued ownership
+transition safe by itself.
 
 Canary workflow run `29180371449` succeeded first. Full-pack workflow run
 `29180593038` then updated and read back all six exact IDs: the canary remained
@@ -106,6 +120,13 @@ empty for every rule. This establishes scheduler metadata and execution timing
 for the enabled Graph-fallback rules, but it does not attribute any alert or
 incident to them.
 
+The historical exact `NLS-GW` portal filter returned zero rows before the
+separate portal-native validation objects were created. A follow-up filter
+returned exactly three rows: `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and
+`NLS-GW-LIVE-004`. None of the six Graph-fallback display names or stable IDs
+appeared. This keeps Graph-object portal visibility unresolved and does not
+change alert attribution.
+
 Successful deployment is not evidence of a custom alert. The safe telemetry
 produced live query matches for four behavior rules. On July 12, a 12-hour
 `DeviceProcessEvents` recheck returned two real `mc.exe` rows on `nls-gw-lab`,
@@ -117,8 +138,8 @@ check for an `NLS-GW` title or `Custom` detection source returned no results.
 ## Portal-native scheduler and alert finding
 
 Three separate alert-only rules were created manually in the Defender portal
-with exact checked-in queries, all devices in scope, and zero automated response
-actions. Scheduled rule `NLS-GW-LIVE-001` (portal rule `152`) was created July 12
+with the then-current checked-in queries, all devices in scope, and zero
+automated response actions. Scheduled rule `NLS-GW-LIVE-001` (portal rule `152`) was created July 12
 at `09:39:42` in the portal's UTC-5 display. Its High-severity Persistence alert
 `ede0f56adf-2532-41c2-98a8-ac08a2481201_aml` linked to incident `628` at
 `09:46:42`; its last run at `10:39:42` was **Completed**, with the next run at
@@ -141,10 +162,11 @@ does not establish that the marker was the alert's sole cause.
 
 All three are **Custom detection** / **Microsoft Defender for Endpoint** alerts,
 and all three alert detail pages now show incident `628` at High severity with
-**Active alerts 3/3**. This proves the exact queries, real endpoint telemetry,
-scheduled and Continuous (NRT) evaluation, alert creation, and incident
-correlation for the separate portal-native rules. It does not attribute an
-alert or incident to the native Repository path or a Graph-fallback object.
+**Active alerts 3/3**. This proves the validation-time query revisions, real
+endpoint telemetry, scheduled and Continuous (NRT) evaluation, alert creation,
+and incident correlation for the separate portal-native rules. It does not
+attribute an alert or incident to the native Repository path or a Graph-fallback
+object.
 Read-only Graph inspection independently established hourly scheduler execution
 timing for the five enabled fallback rules, but Graph-rule alert attribution
 remains unestablished.

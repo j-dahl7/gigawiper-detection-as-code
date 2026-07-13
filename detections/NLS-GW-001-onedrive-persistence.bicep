@@ -13,9 +13,10 @@ let RegistrySignals = DeviceRegistryEvents
 DeviceProcessEvents
 | where FileName =~ "schtasks.exe"
 | where ProcessCommandLine has "OneDrive Update"
-| where ProcessCommandLine has_any (" /create ", " -create ", "/create")
-| join kind=innerunique RegistrySignals on DeviceId
+| where ProcessCommandLine has_any (" -create ", "/create")
+| join kind=inner RegistrySignals on DeviceId
 | where abs(datetime_diff('minute', RegistryTimestamp, Timestamp)) <= 15
+| summarize arg_max(Timestamp, *) by DeviceId
 | project Timestamp, DeviceId, ReportId, DeviceName, FileName, FolderPath, ProcessCommandLine, AccountName, RegistryTimestamp, RegistryKey, RegistryValueName, RegistryValueData, RegistryInitiatingProcess
 '''
   }

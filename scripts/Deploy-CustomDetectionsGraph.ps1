@@ -126,8 +126,12 @@ function Invoke-DetectionGraphRequest {
             $response = Invoke-WebRequest @invokeParameters
         }
         catch {
+            if ($attempt -lt 4) {
+                Start-Sleep -Seconds ([math]::Min([math]::Pow(2, $attempt), 60))
+                continue
+            }
             if ($SanitizedErrors) {
-                throw 'Microsoft Graph request failed before a response was returned.'
+                throw 'Microsoft Graph request failed before a response was returned after 4 attempts.'
             }
             throw
         }
@@ -196,6 +200,21 @@ function Get-DetectionResponseActionCount {
         }
     }
     return $count
+}
+
+function Assert-ExistingDetectionIsAlertOnly {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RuleId,
+
+        [Parameter(Mandatory)]
+        [object]$Rule
+    )
+
+    $responseActionCount = Get-DetectionResponseActionCount -DetectionAction $Rule.detectionAction
+    if ($responseActionCount -gt 0) {
+        throw "Existing rule '$RuleId' has $responseActionCount response action(s). Refusing to modify an armed rule."
+    }
 }
 
 function ConvertTo-UtcIsoTimestamp {
@@ -317,8 +336,9 @@ function Assert-DetectionMatches {
     if (($expectedHostColumns -join '|') -cne ($actualHostColumns -join '|')) {
         throw "Verification mismatch for rule '$($Expected.id)' host entity mapping."
     }
-    if (@($Actual.detectionAction.responseActions).Count -gt 0) {
-        throw "Rule '$($Expected.id)' has response actions after deployment; the lab requires alert-only rules."
+    $responseActionCount = Get-DetectionResponseActionCount -DetectionAction $Actual.detectionAction
+    if ($responseActionCount -gt 0) {
+        throw "Rule '$($Expected.id)' has $responseActionCount response action(s) after deployment; the lab requires alert-only rules."
     }
 }
 
@@ -409,6 +429,9 @@ if ([string]::IsNullOrWhiteSpace($env:GRAPH_ACCESS_TOKEN)) {
 $results = foreach ($rule in $compiledRules) {
     $ruleUri = '{0}/{1}' -f $graphBaseUri, [uri]::EscapeDataString([string]$rule.id)
     $existing = Invoke-DetectionGraphRequest -Method GET -Uri $ruleUri -AllowedStatus @(200, 404)
+    if ($existing.StatusCode -eq 200) {
+        Assert-ExistingDetectionIsAlertOnly -RuleId $rule.id -Rule $existing.Body
+    }
 
     if ($existing.StatusCode -eq 404) {
         $createJson = $rule | ConvertTo-Json -Depth 100 -Compress
@@ -418,6 +441,7 @@ $results = foreach ($rule in $compiledRules) {
             if ($raceCheck.StatusCode -ne 200) {
                 throw "Rule '$($rule.id)' conflicted by name, title, or ID, but its stable ID is still absent. Refusing to adopt another rule."
             }
+            Assert-ExistingDetectionIsAlertOnly -RuleId $rule.id -Rule $raceCheck.Body
             $updateBody = [ordered]@{}
             foreach ($key in @('displayName', 'description', 'status', 'queryCondition', 'schedule', 'detectionAction')) {
                 if ($rule.Contains($key)) {
@@ -452,7 +476,7 @@ $results = foreach ($rule in $compiledRules) {
         Operation = $operation
         HttpStatus = $write.StatusCode
         VerifiedStatus = $verified.Body.status
-        ResponseActions = @($verified.Body.detectionAction.responseActions).Count
+        ResponseActions = Get-DetectionResponseActionCount -DetectionAction $verified.Body.detectionAction
         LastModified = $verified.Body.lastModifiedDateTime
         RequestId = if ($write.RequestId) { $write.RequestId } else { 'not-returned' }
     }

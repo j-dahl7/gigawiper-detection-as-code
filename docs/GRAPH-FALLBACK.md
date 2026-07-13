@@ -46,7 +46,14 @@ Add these environment variables; neither value is a credential:
 
 ## Run order
 
-1. Let any native Sentinel Repository workflow finish. Do not overlap owners.
+The checked-in native and Graph workflows share the
+`nls-gigawiper-custom-detection-writer` concurrency group. GitHub admits only
+one of those workflow runs at a time; `cancel-in-progress: false` also prevents
+a new dispatch from terminating an active deployment.
+
+1. Let any native Sentinel Repository workflow finish. The shared lock prevents
+   execution overlap, but confirm the intended owner before allowing a queued
+   writer to proceed.
 2. Run **Deploy custom detections - preview fallback** from `main`.
 3. Select `Canary` and type `DEPLOY_PREVIEW_FALLBACK`.
 4. Confirm `nls-gw-000-canary` is read back as `disabled` with zero response
@@ -58,6 +65,16 @@ Add these environment variables; neither value is a credential:
 The script performs exact-ID GET/POST/PATCH operations only. It never deletes
 or prunes rules, and it refuses to adopt a name/title conflict when the expected
 stable ID is absent.
+
+## Retire the fallback
+
+After the six stable IDs have been deleted or deliberately transferred to a
+working native owner, delete the dedicated
+`nls-gigawiper-custom-detection-fallback` app registration. Then remove the
+`CUSTOM_DETECTION_CLIENT_ID` and `AZURE_TENANT_ID` variables from the
+`custom-detection-fallback` GitHub environment and remove that environment if
+it has no other purpose. Do not delete the identity before any separately
+authorized exact-ID rule cleanup that depends on it.
 
 ## References
 

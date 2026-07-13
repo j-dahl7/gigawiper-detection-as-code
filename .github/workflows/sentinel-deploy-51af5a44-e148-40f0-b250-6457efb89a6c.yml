@@ -9,16 +9,27 @@ name: Deploy Content to sentinel-federation-eus2-law [51af5a44-e148-40f0-b250-64
 #   2. Append the path to the directory environment variable below
 #       directory: '${{ github.workspace }}/SentinelContent'
 
+# Safety override for the generated workflow: native Repository synchronization
+# failed during this lab and the six stable IDs are currently managed through a
+# separately authorized Graph fallback. Keep the native retry manual until
+# ownership is deliberately transferred back to the Repository connection.
 on:
-  push:
-    branches: [ main ]
-    paths:
-    - '**'
-    - '!.github/workflows/**'  # this filter prevents other workflow changes from triggering this workflow
-    - '.github/workflows/sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c.yml'
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DEPLOY_NATIVE_SENTINEL_CONTENT to authorize a native retry'
+        required: true
+        type: string
+
+# This exact group is also used by graph-preview-fallback.yml. GitHub therefore
+# permits only one native-or-Graph writer to execute at a time.
+concurrency:
+  group: nls-gigawiper-custom-detection-writer
+  cancel-in-progress: false
 
 jobs:
   deploy-content:
+    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'DEPLOY_NATIVE_SENTINEL_CONTENT' }}
     runs-on: windows-latest
     env:
       resourceGroupName: 'sentinel-federation-eus2-rg'
@@ -40,7 +51,7 @@ jobs:
     - name: Login to Azure (Attempt 1)
       continue-on-error: true
       id: login1
-      uses: azure/login@v2
+      uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
       with:
         client-id: ${{ secrets.AZURE_SENTINEL_CLIENTID_51af5a44e14840f0b2506457efb89a6c }}
         tenant-id: ${{ secrets.AZURE_SENTINEL_TENANTID_51af5a44e14840f0b2506457efb89a6c }}
@@ -56,7 +67,7 @@ jobs:
     - name: Login to Azure (Attempt 2)
       continue-on-error: true
       id: login2
-      uses: azure/login@v2
+      uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
       if: ${{ steps.login1.outcome=='failure' }}
       with:
         client-id: ${{ secrets.AZURE_SENTINEL_CLIENTID_51af5a44e14840f0b2506457efb89a6c }}
@@ -73,7 +84,7 @@ jobs:
     - name: Login to Azure (Attempt 3)
       continue-on-error: false
       id: login3
-      uses: azure/login@v2
+      uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
       if: ${{ steps.login2.outcome=='failure'  }}
       with:
         client-id: ${{ secrets.AZURE_SENTINEL_CLIENTID_51af5a44e14840f0b2506457efb89a6c }}
@@ -84,11 +95,15 @@ jobs:
         enable-AzPSSession: true
 
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+    - name: Install pinned Bicep CLI
+      shell: pwsh
+      run: az bicep install --version v0.45.6
 
     - name: Deploy Content to Microsoft Sentinel
-      uses: azure/powershell@v2
+      uses: azure/powershell@6101bc5f8a23168669e44f7e68db621ec5ecbc6e # v2
       with:
-        azPSVersion: 'latest'
+        azPSVersion: '16.1.0'
         inlineScript: |
           ${{ github.workspace }}//.github/workflows/azure-sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c.ps1
