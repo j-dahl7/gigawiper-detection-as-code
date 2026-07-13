@@ -557,7 +557,7 @@ function Deployment($fullDeploymentFlag, $remoteShaTable, $tree) {
 
             if ($path -like "*.bicep") {
                 $templateType = "Bicep"
-                $templateObject = bicep build $path --stdout | Out-String | ConvertFrom-Json
+                $templateObject = az bicep build --file $path --stdout --only-show-errors | Out-String | ConvertFrom-Json
             } else {
                 $templateType = "ARM"
                 $templateObject = Get-Content $path | Out-String | ConvertFrom-Json

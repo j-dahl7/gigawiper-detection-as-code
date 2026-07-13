@@ -3,8 +3,16 @@ name: Deploy custom detections - preview fallback
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Read scheduler metadata or apply the preview fallback
+        required: true
+        type: choice
+        options:
+          - Inspect
+          - Apply
+        default: Inspect
       scope:
-        description: Rules to apply
+        description: Rules to inspect or apply
         required: true
         type: choice
         options:
@@ -12,7 +20,7 @@ on:
           - All
         default: Canary
       confirmation:
-        description: Type DEPLOY_PREVIEW_FALLBACK
+        description: Type INSPECT_PREVIEW_FALLBACK or DEPLOY_PREVIEW_FALLBACK
         required: true
         type: string
 
@@ -24,12 +32,18 @@ env:
   AZURE_CORE_OUTPUT: none
 
 concurrency:
-  group: custom-detection-preview-fallback
+  # Shared with the native Repository workflow so the two potential writers
+  # cannot execute concurrently even if both are manually dispatched.
+  group: nls-gigawiper-custom-detection-writer
   cancel-in-progress: false
 
 jobs:
   deploy:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.confirmation == 'DEPLOY_PREVIEW_FALLBACK' }}
+    if: >-
+      ${{ (inputs.operation == 'Inspect' && inputs.confirmation == 'INSPECT_PREVIEW_FALLBACK') ||
+          (github.ref == 'refs/heads/main' &&
+           inputs.operation == 'Apply' &&
+           inputs.confirmation == 'DEPLOY_PREVIEW_FALLBACK') }}
     runs-on: windows-latest
     environment: custom-detection-fallback
     steps:
@@ -46,23 +60,25 @@ jobs:
           allow-no-subscriptions: true
 
       - name: Install the validated Bicep CLI
+        if: ${{ inputs.operation == 'Apply' }}
         shell: pwsh
         run: az bicep install --version v0.45.6
 
-      - name: Compile, apply, and verify custom detections
+      - name: Inspect or apply custom detections
         shell: pwsh
         env:
+          RUN_MODE: ${{ inputs.operation }}
           DEPLOY_SCOPE: ${{ inputs.scope }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv
+          $token = az account get-access-token --resource-type ms-graph --query accessToken -o tsv 2>$null
           if (-not $token) {
             throw 'Microsoft Graph token acquisition returned no token.'
           }
           Write-Output "::add-mask::$token"
           try {
             $env:GRAPH_ACCESS_TOKEN = $token
-            ./scripts/Deploy-CustomDetectionsGraph.ps1 -Mode Apply -Scope $env:DEPLOY_SCOPE
+            ./scripts/Deploy-CustomDetectionsGraph.ps1 -Mode $env:RUN_MODE -Scope $env:DEPLOY_SCOPE
           }
           finally {
             Remove-Item Env:GRAPH_ACCESS_TOKEN -ErrorAction SilentlyContinue

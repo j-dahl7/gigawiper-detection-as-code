@@ -1,47 +1,138 @@
 // Synthetic-only KQL fixtures. These rows are not endpoint events and must not
-// be presented as genuine Defender alerts.
+// be presented as genuine Defender alerts. Each marked query block is a
+// normalized exact copy of its compiled detection query; Test-Lab.ps1 removes
+// only the fixture result alias and final statement terminator before comparing.
 
-let ProcessEvents = datatable(Timestamp:datetime, DeviceId:string, ReportId:long, DeviceName:string, FileName:string, ProcessCommandLine:string)
+let DeviceProcessEvents = datatable(Timestamp:datetime, DeviceId:string, ReportId:long, DeviceName:string, FileName:string, FolderPath:string, ProcessCommandLine:string, AccountName:string, InitiatingProcessFileName:string, InitiatingProcessCommandLine:string, ProcessIntegrityLevel:string, ProcessVersionInfoCompanyName:string, SHA256:string)
 [
-    datetime(2026-07-11T12:00:00Z), "device-lab-01", 1001, "nls-win-lab", "schtasks.exe", "schtasks.exe /Create /TN \"OneDrive Update\" /TR \"cmd.exe /c exit 0\" /SC ONCE /ST 12:10 /F",
-    datetime(2026-07-11T12:05:00Z), "device-lab-01", 1002, "nls-win-lab", "wevtutil.exe", "wevtutil.exe cl Security",
-    datetime(2026-07-11T12:10:00Z), "device-lab-01", 1003, "nls-win-lab", "reagentc.exe", "reagentc.exe /disable",
-    datetime(2026-07-11T12:15:00Z), "device-lab-01", 1004, "nls-win-lab", "mc.exe", "mc.exe mirror C:\\Sensitive alias/bucket"
+    // Persistence positive: the first task event is deliberately outside the
+    // registry window and the second is inside it. This catches pre-join
+    // innerunique deduplication false negatives.
+    datetime(2026-07-11T11:30:00Z), "persistence-positive", 1000, "nls-positive", "schtasks.exe", @"C:\Windows\System32", "schtasks.exe /Create /TN \"OneDrive Update\" /TR \"cmd.exe /c exit 0\"", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:00:00Z), "persistence-positive", 1001, "nls-positive", "schtasks.exe", @"C:\Windows\System32", "schtasks.exe /Create /TN \"OneDrive Update\" /TR \"cmd.exe /c exit 0\"", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:00:00Z), "persistence-negative", 1002, "nls-negative", "schtasks.exe", @"C:\Windows\System32", "schtasks.exe /Query /TN \"OneDrive Update\"", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:10:00Z), "recovery-positive", 1101, "nls-positive", "reagentc.exe", @"C:\Windows\System32", "reagentc.exe /disable", "SYSTEM", "cmd.exe", "cmd.exe", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:10:01Z), "recovery-positive", 1103, "nls-positive", "bcdedit.exe", @"C:\Windows\System32", "bcdedit.exe /set {default} recoveryenabled no", "SYSTEM", "cmd.exe", "cmd.exe", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:10:02Z), "recovery-positive", 1104, "nls-positive", "bcdedit.exe", @"C:\Windows\System32", "bcdedit.exe /set {default} bootstatuspolicy ignoreallfailures", "SYSTEM", "cmd.exe", "cmd.exe", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:10:03Z), "recovery-positive", 1105, "nls-positive", "takeown.exe", @"C:\Windows\System32", @"takeown.exe /f C:\Windows\Boot\EFI\bootmgfw.efi", "SYSTEM", "cmd.exe", "cmd.exe", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:10:04Z), "recovery-positive", 1106, "nls-positive", "icacls.exe", @"C:\Windows\System32", @"icacls.exe C:\Windows\System32\ntoskrnl.exe /grant Users:F", "SYSTEM", "cmd.exe", "cmd.exe", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:10:00Z), "recovery-negative", 1102, "nls-negative", "reagentc.exe", @"C:\Windows\System32", "reagentc.exe /enable", "SYSTEM", "cmd.exe", "cmd.exe", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:15:00Z), "log-positive", 1201, "nls-positive", "wevtutil.exe", @"C:\Windows\System32", "wevtutil.exe cl NLS-GigaWiper-Lab", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:15:01Z), "log-positive", 1203, "nls-positive", "wevtutil.exe", @"C:\Windows\System32", "wevtutil.exe clear-log NLS-GigaWiper-Lab", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:15:00Z), "log-negative", 1202, "nls-negative", "wevtutil.exe", @"C:\Windows\System32", "wevtutil.exe qe NLS-GigaWiper-Lab", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "Microsoft Corporation", "",
+    datetime(2026-07-11T12:20:00Z), "minio-positive", 1301, "nls-positive", "mc.exe", @"C:\ProgramData\NLS-GigaWiper-Lab", @"mc.exe mirror C:\Sensitive alias/bucket", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "", "",
+    datetime(2026-07-11T12:20:01Z), "minio-positive", 1303, "nls-positive", "mc.exe", @"C:\ProgramData\NLS-GigaWiper-Lab", @"mc.exe cp C:\Sensitive\decoy.txt alias/bucket", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "", "",
+    datetime(2026-07-11T12:20:02Z), "minio-positive", 1304, "nls-positive", "mc.exe", @"C:\ProgramData\NLS-GigaWiper-Lab", @"mc.exe pipe alias/bucket/decoy.txt", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "", "",
+    datetime(2026-07-11T12:20:03Z), "minio-positive", 1305, "nls-positive", "mc.exe", @"C:\ProgramData\NLS-GigaWiper-Lab", "mc.exe alias set fixture https://127.0.0.1.invalid ACCESS SECRET", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "", "",
+    datetime(2026-07-11T12:20:00Z), "minio-negative", 1302, "nls-negative", "mc.exe", @"C:\ProgramData\NLS-GigaWiper-Lab", "mc.exe admin info alias", "SYSTEM", "powershell.exe", "powershell.exe -File fixture.ps1", "High", "", ""
 ];
-let RegistryEvents = datatable(DeviceId:string, RegistryTimestamp:datetime, RegistryKey:string, RegistryValueName:string, RegistryValueData:string)
+let DeviceRegistryEvents = datatable(Timestamp:datetime, DeviceId:string, ReportId:long, RegistryKey:string, RegistryValueName:string, RegistryValueData:string, InitiatingProcessFileName:string)
 [
-    "device-lab-01", datetime(2026-07-11T12:02:00Z), @"HKEY_CURRENT_USER\SOFTWARE\OneDrive\Environment", "NLSLabMarker", "SAFE-TELEMETRY-ONLY"
+    datetime(2026-07-11T12:02:00Z), "persistence-positive", 2001, @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\OneDrive Update", "Id", "{SAFE-FIXTURE}", "svchost.exe",
+    datetime(2026-07-11T12:02:00Z), "persistence-negative", 2002, @"HKEY_CURRENT_USER\SOFTWARE\OneDrive\Environment", "NLSLabMarker", "SAFE-TELEMETRY-ONLY", "reg.exe"
 ];
-let FileEvents = datatable(Timestamp:datetime, DeviceId:string, ReportId:long, DeviceName:string, ActionType:string, FileName:string, FolderPath:string)
+let DeviceFileEvents = datatable(Timestamp:datetime, DeviceId:string, ReportId:long, DeviceName:string, ActionType:string, FileName:string, FolderPath:string, InitiatingProcessFileName:string, InitiatingProcessCommandLine:string, SHA256:string)
 [
-    datetime(2026-07-11T12:20:01Z), "device-lab-01", 2001, "nls-win-lab", "FileRenamed", "decoy-01.candy", @"C:\NLS-Decoys",
-    datetime(2026-07-11T12:20:02Z), "device-lab-01", 2002, "nls-win-lab", "FileRenamed", "decoy-02.candy", @"C:\NLS-Decoys",
-    datetime(2026-07-11T12:20:03Z), "device-lab-01", 2003, "nls-win-lab", "FileRenamed", "decoy-03.candy", @"C:\NLS-Decoys",
-    datetime(2026-07-11T12:20:04Z), "device-lab-01", 2004, "nls-win-lab", "FileRenamed", "decoy-04.candy", @"C:\NLS-Decoys",
-    datetime(2026-07-11T12:20:05Z), "device-lab-01", 2005, "nls-win-lab", "FileRenamed", "decoy-05.candy", @"C:\NLS-Decoys",
-    datetime(2026-07-11T12:20:06Z), "device-lab-01", 2006, "nls-win-lab", "FileRenamed", "decoy-06.candy", @"C:\NLS-Decoys",
-    datetime(2026-07-11T12:20:07Z), "device-lab-01", 2007, "nls-win-lab", "FileRenamed", "decoy-07.candy", @"C:\NLS-Decoys",
-    datetime(2026-07-11T12:20:08Z), "device-lab-01", 2008, "nls-win-lab", "FileRenamed", "decoy-08.candy", @"C:\NLS-Decoys"
+    // Five events span a clock-aligned bin boundary but still occur within four
+    // seconds. A fixed bin(Timestamp, 5m) implementation fails this positive.
+    datetime(2026-07-11T12:04:58Z), "candy-positive", 3001, "nls-positive", "FileRenamed", "decoy-01.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", "",
+    datetime(2026-07-11T12:04:59Z), "candy-positive", 3002, "nls-positive", "FileRenamed", "decoy-02.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", "",
+    datetime(2026-07-11T12:05:00Z), "candy-positive", 3003, "nls-positive", "FileRenamed", "decoy-03.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", "",
+    datetime(2026-07-11T12:05:01Z), "candy-positive", 3004, "nls-positive", "FileRenamed", "decoy-04.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", "",
+    datetime(2026-07-11T12:05:02Z), "candy-positive", 3005, "nls-positive", "FileRenamed", "decoy-05.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", "",
+    datetime(2026-07-11T12:10:00Z), "candy-negative", 3101, "nls-negative", "FileRenamed", "decoy-01.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", "",
+    datetime(2026-07-11T12:10:01Z), "candy-negative", 3102, "nls-negative", "FileRenamed", "decoy-02.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", "",
+    datetime(2026-07-11T12:10:02Z), "candy-negative", 3103, "nls-negative", "FileRenamed", "decoy-03.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", "",
+    datetime(2026-07-11T12:10:03Z), "candy-negative", 3104, "nls-negative", "FileRenamed", "decoy-04.candy", @"C:\NLS-Decoys", "powershell.exe", "fixture.ps1", ""
 ];
-let PersistenceResult = ProcessEvents
-| where FileName =~ "schtasks.exe" and ProcessCommandLine has "OneDrive Update"
-| join kind=innerunique RegistryEvents on DeviceId
+
+// BEGIN EXACT QUERY nls-gw-001-onedrive-persistence
+let RegistrySignals = DeviceRegistryEvents
+| where RegistryKey endswith @"\SOFTWARE\OneDrive\Environment"
+    or RegistryKey endswith @"\Schedule\TaskCache\Tree\OneDrive Update"
+| project DeviceId, RegistryTimestamp=Timestamp, RegistryReportId=ReportId, RegistryKey, RegistryValueName, RegistryValueData, RegistryInitiatingProcess=InitiatingProcessFileName;
+let PersistenceMatches = DeviceProcessEvents
+| where FileName =~ "schtasks.exe"
+| where ProcessCommandLine has "OneDrive Update"
+| where ProcessCommandLine has_any (" -create ", "/create")
+| join kind=inner RegistrySignals on DeviceId
 | where abs(datetime_diff('minute', RegistryTimestamp, Timestamp)) <= 15
-| project Test="PersistenceCorrelation", Passed=true, Timestamp, DeviceId, ReportId;
-let LogClearResult = ProcessEvents
-| where FileName =~ "wevtutil.exe" and ProcessCommandLine has " cl "
-| project Test="EventLogDestruction", Passed=true, Timestamp, DeviceId, ReportId;
-let RecoveryResult = ProcessEvents
-| where FileName =~ "reagentc.exe" and ProcessCommandLine has "/disable"
-| project Test="RecoveryTampering", Passed=true, Timestamp, DeviceId, ReportId;
-let MinioResult = ProcessEvents
-| where FileName =~ "mc.exe" and ProcessCommandLine has " mirror "
-| project Test="MinIOStaging", Passed=true, Timestamp, DeviceId, ReportId;
-let CandyResult = FileEvents
-| where ActionType == "FileRenamed" and FileName endswith ".candy"
-| extend DetectionWindow=bin(Timestamp, 5m)
-| summarize CandyFileCount=count(), arg_max(Timestamp, ReportId) by DeviceId, DetectionWindow
+| summarize arg_max(Timestamp, *) by DeviceId
+| project Timestamp, DeviceId, ReportId, DeviceName, FileName, FolderPath, ProcessCommandLine, AccountName, RegistryTimestamp, RegistryKey, RegistryValueName, RegistryValueData, RegistryInitiatingProcess;
+// END EXACT QUERY nls-gw-001-onedrive-persistence
+
+// BEGIN EXACT QUERY nls-gw-002-recovery-boot-tampering
+let RecoveryMatches = DeviceProcessEvents
+| where
+    (FileName =~ "reagentc.exe" and ProcessCommandLine has "/disable")
+    or (FileName =~ "bcdedit.exe" and ProcessCommandLine has_all ("recoveryenabled", "no"))
+    or (FileName =~ "bcdedit.exe" and ProcessCommandLine has_all ("bootstatuspolicy", "ignoreallfailures"))
+    or (FileName in~ ("takeown.exe", "icacls.exe") and ProcessCommandLine has_any ("winload.efi", "bootmgfw.efi", "ntoskrnl.exe", "\\Boot\\BCD"))
+| project Timestamp, DeviceId, ReportId, DeviceName, FileName, FolderPath, ProcessCommandLine, AccountName, InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256;
+// END EXACT QUERY nls-gw-002-recovery-boot-tampering
+
+// BEGIN EXACT QUERY nls-gw-003-event-log-destruction
+let LogClearMatches = DeviceProcessEvents
+| where FileName =~ "wevtutil.exe"
+| where ProcessCommandLine has_any (" cl ", " clear-log ")
+| project Timestamp, DeviceId, ReportId, DeviceName, FileName, FolderPath, ProcessCommandLine, AccountName, InitiatingProcessFileName, InitiatingProcessCommandLine, ProcessIntegrityLevel, SHA256;
+// END EXACT QUERY nls-gw-003-event-log-destruction
+
+// BEGIN EXACT QUERY nls-gw-004-minio-transfer-staging
+let MinioMatches = DeviceProcessEvents
+| where FileName =~ "mc.exe"
+| where ProcessCommandLine has_any (" mirror ", " cp ", " pipe ", " alias set ")
+| project Timestamp, DeviceId, ReportId, DeviceName, FileName, FolderPath, ProcessCommandLine, AccountName, InitiatingProcessFileName, InitiatingProcessCommandLine, ProcessVersionInfoCompanyName, SHA256;
+// END EXACT QUERY nls-gw-004-minio-transfer-staging
+
+// BEGIN EXACT QUERY nls-gw-005-candy-rename-burst
+let CandyEvents = DeviceFileEvents
+| where ActionType == "FileRenamed"
+| where FileName endswith ".candy"
+| project Timestamp, DeviceId, ReportId, DeviceName, FileName, FolderPath, InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256;
+let LookupWindow = 5m;
+let LookupBin = LookupWindow / 2.0;
+let CandyMatches = CandyEvents
+| project DeviceId, WindowStart=Timestamp, TimeKey=bin(Timestamp, LookupBin)
+| join kind=inner (
+    CandyEvents
+    | project Timestamp, DeviceId, ReportId, DeviceName, FileName, FolderPath, InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256,
+        TimeKey=range(bin(Timestamp - LookupWindow, LookupBin), bin(Timestamp, LookupBin), LookupBin)
+    | mv-expand TimeKey to typeof(datetime)
+  ) on DeviceId, TimeKey
+| where Timestamp between (WindowStart .. WindowStart + LookupWindow)
+| summarize CandyFileCount=count(), SampleFiles=make_set(FileName, 20), SampleFolders=make_set(FolderPath, 10), arg_max(Timestamp, ReportId, DeviceName, InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256) by DeviceId, WindowStart
 | where CandyFileCount >= 5
-| project Test="CandyRenameBurst", Passed=true, Timestamp, DeviceId, ReportId;
-union PersistenceResult, LogClearResult, RecoveryResult, MinioResult, CandyResult
+| summarize arg_max(Timestamp, *) by DeviceId
+| project Timestamp, DeviceId, ReportId, DeviceName, CandyFileCount, SampleFiles, SampleFolders, InitiatingProcessFileName, InitiatingProcessCommandLine, SHA256;
+// END EXACT QUERY nls-gw-005-candy-rename-burst
+
+let PersistenceActual = PersistenceMatches | summarize Actual=count() by DeviceId;
+let RecoveryActual = RecoveryMatches | summarize Actual=count() by DeviceId;
+let LogClearActual = LogClearMatches | summarize Actual=count() by DeviceId;
+let MinioActual = MinioMatches | summarize Actual=count() by DeviceId;
+let CandyActual = CandyMatches | summarize Actual=count() by DeviceId;
+let Expectations = datatable(Test:string, DeviceId:string, Detection:string, Expected:long)
+[
+    "PersistencePositive", "persistence-positive", "Persistence", 1,
+    "PersistenceNegative", "persistence-negative", "Persistence", 0,
+    "RecoveryPositive", "recovery-positive", "Recovery", 5,
+    "RecoveryNegative", "recovery-negative", "Recovery", 0,
+    "EventLogPositive", "log-positive", "EventLog", 2,
+    "EventLogNegative", "log-negative", "EventLog", 0,
+    "MinIOPositive", "minio-positive", "MinIO", 4,
+    "MinIONegative", "minio-negative", "MinIO", 0,
+    "CandyPositive", "candy-positive", "Candy", 1,
+    "CandyNegative", "candy-negative", "Candy", 0
+];
+let Actuals = union
+    (PersistenceActual | extend Detection="Persistence"),
+    (RecoveryActual | extend Detection="Recovery"),
+    (LogClearActual | extend Detection="EventLog"),
+    (MinioActual | extend Detection="MinIO"),
+    (CandyActual | extend Detection="Candy");
+Expectations
+| join kind=leftouter Actuals on DeviceId, Detection
+| extend Actual=coalesce(Actual, tolong(0))
+| project Test, Expected, Actual, Passed=(Actual == Expected)
 | order by Test asc

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('Plan', 'Apply')]
+    [ValidateSet('Plan', 'Apply', 'Inspect')]
     [string]$Mode = 'Plan',
 
     [ValidateSet('All', 'Canary')]
@@ -22,7 +22,7 @@ $allowedRootProperties = @(
     'detectionAction'
 )
 
-if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+if ($Mode -ne 'Inspect' -and -not (Get-Command az -ErrorAction SilentlyContinue)) {
     throw 'Azure CLI with the Bicep CLI is required.'
 }
 
@@ -100,7 +100,9 @@ function Invoke-DetectionGraphRequest {
         [AllowNull()]
         [string]$Body,
 
-        [int[]]$AllowedStatus = @(200)
+        [int[]]$AllowedStatus = @(200),
+
+        [switch]$SanitizedErrors
     )
 
     $headers = @{
@@ -120,7 +122,19 @@ function Invoke-DetectionGraphRequest {
 
     $response = $null
     for ($attempt = 1; $attempt -le 4; $attempt++) {
-        $response = Invoke-WebRequest @invokeParameters
+        try {
+            $response = Invoke-WebRequest @invokeParameters
+        }
+        catch {
+            if ($attempt -lt 4) {
+                Start-Sleep -Seconds ([math]::Min([math]::Pow(2, $attempt), 60))
+                continue
+            }
+            if ($SanitizedErrors) {
+                throw 'Microsoft Graph request failed before a response was returned after 4 attempts.'
+            }
+            throw
+        }
         $status = [int]$response.StatusCode
         if (($status -eq 429 -or $status -ge 500) -and $attempt -lt 4) {
             $retryAfter = 0
@@ -148,6 +162,9 @@ function Invoke-DetectionGraphRequest {
 
     if ($status -notin $AllowedStatus) {
         $code = if ($parsedBody.error.code) { $parsedBody.error.code } else { 'UnknownGraphError' }
+        if ($SanitizedErrors) {
+            throw "Microsoft Graph $Method failed with HTTP $status ($code)."
+        }
         $message = if ($parsedBody.error.message) { $parsedBody.error.message } else { 'No error message returned.' }
         $requestId = if ($parsedBody.error.innerError.'request-id') { $parsedBody.error.innerError.'request-id' } else { 'not-returned' }
         throw "Microsoft Graph $Method $Uri failed with HTTP $status ($code): $message Request ID: $requestId"
@@ -157,6 +174,87 @@ function Invoke-DetectionGraphRequest {
         StatusCode = $status
         Body = $parsedBody
         RequestId = [string]$response.Headers.'request-id'
+    }
+}
+
+function Get-DetectionResponseActionCount {
+    param(
+        [AllowNull()]
+        [object]$DetectionAction
+    )
+
+    if ($null -eq $DetectionAction) {
+        return 0
+    }
+
+    $count = if ($null -eq $DetectionAction.responseActions) {
+        0
+    } else {
+        @($DetectionAction.responseActions).Count
+    }
+    if ($DetectionAction.automatedActions) {
+        foreach ($property in $DetectionAction.automatedActions.PSObject.Properties) {
+            if ($property.Name -notlike '@*' -and $null -ne $property.Value) {
+                $count += @($property.Value).Count
+            }
+        }
+    }
+    return $count
+}
+
+function Assert-ExistingDetectionIsAlertOnly {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RuleId,
+
+        [Parameter(Mandatory)]
+        [object]$Rule
+    )
+
+    $responseActionCount = Get-DetectionResponseActionCount -DetectionAction $Rule.detectionAction
+    if ($responseActionCount -gt 0) {
+        throw "Existing rule '$RuleId' has $responseActionCount response action(s). Refusing to modify an armed rule."
+    }
+}
+
+function ConvertTo-UtcIsoTimestamp {
+    param(
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) {
+        return ''
+    }
+
+    try {
+        return ([DateTimeOffset]$Value).ToUniversalTime().ToString(
+            'o',
+            [Globalization.CultureInfo]::InvariantCulture
+        )
+    }
+    catch {
+        throw 'Microsoft Graph returned an invalid scheduler timestamp.'
+    }
+}
+
+function New-DetectionInspection {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Rule
+    )
+
+    $failureReason = ([string]$Rule.lastRunDetails.failureReason -replace '[\r\n]+', ' ').Trim()
+    [pscustomobject][ordered]@{
+        Id = [string]$Rule.id
+        Status = [string]$Rule.status
+        Frequency = [string]$Rule.schedule.frequency
+        NextRunDateTime = ConvertTo-UtcIsoTimestamp -Value $Rule.schedule.nextRunDateTime
+        LastRunStatus = [string]$Rule.lastRunDetails.status
+        LastRunDateTime = ConvertTo-UtcIsoTimestamp -Value $Rule.lastRunDetails.lastRunDateTime
+        LastRunErrorCode = [string]$Rule.lastRunDetails.errorCode
+        LastRunFailureReason = $failureReason
+        ResponseActionCount = Get-DetectionResponseActionCount -DetectionAction $Rule.detectionAction
     }
 }
 
@@ -238,9 +336,70 @@ function Assert-DetectionMatches {
     if (($expectedHostColumns -join '|') -cne ($actualHostColumns -join '|')) {
         throw "Verification mismatch for rule '$($Expected.id)' host entity mapping."
     }
-    if (@($Actual.detectionAction.responseActions).Count -gt 0) {
-        throw "Rule '$($Expected.id)' has response actions after deployment; the lab requires alert-only rules."
+    $responseActionCount = Get-DetectionResponseActionCount -DetectionAction $Actual.detectionAction
+    if ($responseActionCount -gt 0) {
+        throw "Rule '$($Expected.id)' has $responseActionCount response action(s) after deployment; the lab requires alert-only rules."
     }
+}
+
+if ($Mode -eq 'Inspect') {
+    if ([string]::IsNullOrWhiteSpace($env:GRAPH_ACCESS_TOKEN)) {
+        throw 'Set GRAPH_ACCESS_TOKEN to an app-only token containing CustomDetection.Read.All or CustomDetection.ReadWrite.All.'
+    }
+
+    $ruleIds = @(
+        foreach ($file in $files) {
+            $content = Get-Content -LiteralPath $file.FullName -Raw
+            $match = [regex]::Match(
+                $content,
+                "(?ms)resource\s+\w+\s+'Microsoft\.Security/detectionRules@2026-06-01-preview'\s*=\s*\{\s*id:\s*'([^']+)'"
+            )
+            if (-not $match.Success) {
+                throw "Unable to extract the exact custom-detection ID from $($file.Name)."
+            }
+
+            $ruleId = $match.Groups[1].Value
+            if ($ruleId -notmatch '^nls-gw-[a-z0-9-]+$') {
+                throw "Refusing to inspect unexpected rule ID '$ruleId'."
+            }
+            $ruleId
+        }
+    )
+    if (($ruleIds | Sort-Object -Unique).Count -ne $ruleIds.Count) {
+        throw 'Custom-detection inspection IDs are not unique.'
+    }
+
+    $inspectionResults = @(
+        foreach ($ruleId in $ruleIds) {
+            $ruleUri = '{0}/{1}?$select=id,status,schedule,lastRunDetails,detectionAction' -f `
+                $graphBaseUri, [uri]::EscapeDataString($ruleId)
+            $response = Invoke-DetectionGraphRequest `
+                -Method GET `
+                -Uri $ruleUri `
+                -AllowedStatus @(200, 404) `
+                -SanitizedErrors
+            if ($response.StatusCode -eq 404) {
+                throw "Exact custom-detection rule '$ruleId' was not found."
+            }
+            New-DetectionInspection -Rule $response.Body
+        }
+    )
+
+    $inspectionResults | ConvertTo-Json -Depth 5
+    if ($env:GITHUB_STEP_SUMMARY) {
+        @(
+            '### Custom-detection scheduler inspection',
+            '',
+            '| Rule ID | Status | Frequency | Next run | Last-run status | Last run | Error | Failure | Response actions |',
+            '|---|---|---|---|---|---|---|---|---:|'
+        ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+        foreach ($result in $inspectionResults) {
+            $failure = ([string]$result.LastRunFailureReason).Replace('|', '\|')
+            "| ``$($result.Id)`` | $($result.Status) | $($result.Frequency) | $($result.NextRunDateTime) | $($result.LastRunStatus) | $($result.LastRunDateTime) | $($result.LastRunErrorCode) | $failure | $($result.ResponseActionCount) |" |
+                Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+        }
+    }
+    return
 }
 
 $compiledRules = @($files | ForEach-Object { ConvertFrom-DetectionBicep -File $_ })
@@ -270,6 +429,9 @@ if ([string]::IsNullOrWhiteSpace($env:GRAPH_ACCESS_TOKEN)) {
 $results = foreach ($rule in $compiledRules) {
     $ruleUri = '{0}/{1}' -f $graphBaseUri, [uri]::EscapeDataString([string]$rule.id)
     $existing = Invoke-DetectionGraphRequest -Method GET -Uri $ruleUri -AllowedStatus @(200, 404)
+    if ($existing.StatusCode -eq 200) {
+        Assert-ExistingDetectionIsAlertOnly -RuleId $rule.id -Rule $existing.Body
+    }
 
     if ($existing.StatusCode -eq 404) {
         $createJson = $rule | ConvertTo-Json -Depth 100 -Compress
@@ -279,6 +441,7 @@ $results = foreach ($rule in $compiledRules) {
             if ($raceCheck.StatusCode -ne 200) {
                 throw "Rule '$($rule.id)' conflicted by name, title, or ID, but its stable ID is still absent. Refusing to adopt another rule."
             }
+            Assert-ExistingDetectionIsAlertOnly -RuleId $rule.id -Rule $raceCheck.Body
             $updateBody = [ordered]@{}
             foreach ($key in @('displayName', 'description', 'status', 'queryCondition', 'schedule', 'detectionAction')) {
                 if ($rule.Contains($key)) {
@@ -313,7 +476,7 @@ $results = foreach ($rule in $compiledRules) {
         Operation = $operation
         HttpStatus = $write.StatusCode
         VerifiedStatus = $verified.Body.status
-        ResponseActions = @($verified.Body.detectionAction.responseActions).Count
+        ResponseActions = Get-DetectionResponseActionCount -DetectionAction $verified.Body.detectionAction
         LastModified = $verified.Body.lastModifiedDateTime
         RequestId = if ($write.RequestId) { $write.RequestId } else { 'not-returned' }
     }
