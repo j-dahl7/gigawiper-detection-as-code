@@ -1,5 +1,10 @@
 name: Deploy custom detections - preview fallback
 
+# Public reuse requires a dedicated Entra application, federated credential,
+# protected GitHub environment, and variables owned by the operator's tenant.
+# This repository supplies no reusable tenant authorization. Apply mutates the
+# exact custom-detection IDs in that configured tenant; Inspect is read-only.
+
 on:
   workflow_dispatch:
     inputs:
@@ -32,8 +37,10 @@ env:
   AZURE_CORE_OUTPUT: none
 
 concurrency:
-  # Shared with the native Repository workflow so the two potential writers
-  # cannot execute concurrently even if both are manually dispatched.
+  # This is the repository's only active custom-detection writer. Keep the
+  # stable lock name so any separately reviewed, freshly generated native
+  # workflow can be hardened to serialize with it before a future ownership
+  # transition.
   group: nls-gigawiper-custom-detection-writer
   cancel-in-progress: false
 

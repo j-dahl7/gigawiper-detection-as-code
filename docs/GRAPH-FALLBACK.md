@@ -44,23 +44,36 @@ Add these environment variables; neither value is a credential:
 | `CUSTOM_DETECTION_CLIENT_ID` | Application (client) ID of the dedicated app |
 | `AZURE_TENANT_ID` | Tenant ID containing Defender XDR |
 
+These values, the application, and the federated credential must belong to
+your own environment. The public repository supplies no reusable tenant access,
+and the workflow cannot authenticate until you create and authorize this
+dedicated identity. `Apply` mutates tenant-scoped custom-detection objects;
+`Inspect` is limited to exact-ID reads, and local `Plan` obtains no token.
+
 ## Run order
 
-The checked-in native and Graph workflows share the
-`nls-gigawiper-custom-detection-writer` concurrency group. GitHub admits only
-one of those workflow runs at a time; `cancel-in-progress: false` also prevents
-a new dispatch from terminating an active deployment.
+The manual Graph fallback is the only active custom-detection writer checked
+into `.github/workflows`. It retains the
+`nls-gigawiper-custom-detection-writer` concurrency group and
+`cancel-in-progress: false` so a separately reviewed, freshly generated native
+workflow can use the same lock during a deliberate ownership transition.
 
-1. Let any native Sentinel Repository workflow finish. The shared lock prevents
-   execution overlap, but confirm the intended owner before allowing a queued
-   writer to proceed.
+The original tenant-specific native workflow and helper are retained under
+`evidence/generated/sentinel-repository/` as non-reusable validation artifacts.
+Do not move them back into `.github/workflows`. A new Sentinel Repository
+connection in your environment must generate fresh files, which must be
+reviewed and hardened before use.
+
+1. Confirm that no native Sentinel Repository writer is active or queued and
+   that the Graph path is the intended owner for the six stable IDs.
 2. Run **Deploy custom detections - preview fallback** from `main`.
 3. Select `Canary` and type `DEPLOY_PREVIEW_FALLBACK`.
 4. Confirm `nls-gw-000-canary` is read back as `disabled` with zero response
    actions.
 5. Run the workflow again with `All`.
 6. Retain the step-summary table as evidence.
-7. Disable this fallback after native Repository synchronization succeeds.
+7. Disable this fallback before authorizing a fresh native workflow, and keep it
+   disabled after native Repository synchronization succeeds.
 
 The script performs exact-ID GET/POST/PATCH operations only. It never deletes
 or prunes rules, and it refuses to adopt a name/title conflict when the expected
