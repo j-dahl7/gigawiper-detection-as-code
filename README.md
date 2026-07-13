@@ -36,11 +36,13 @@ GitHub Actions: Bicep compile + ID/query/safety checks
     v
 Merge to main (validation only)
     |
-    +--> Manual native Sentinel Repository retry (Preview; exact confirmation)
+    +--> Native Sentinel Repository path (fresh connection required to retest)
     |        |
-    |        +--> FAILED: provider error before Repository ownership
+    |        +--> Fresh connection-generated workflow (review before use)
+    |        |
+    |        +--> July validation: FAILED before Repository ownership
     |
-    +--> Manual Graph fallback (shared cross-workflow writer lock)
+    +--> Manual Graph fallback (only active writer in this repository)
              |
              v
          GitHub OIDC --> exact-ID create/update + read-back
@@ -54,20 +56,24 @@ Merge to main (validation only)
 ```
 
 The ordinary pull-request and `main` workflows validate content but do not
-deploy it. The generated native workflow is configured to require a manual
-dispatch and the exact confirmation `DEPLOY_NATIVE_SENTINEL_CONTENT`. Native
-Sentinel Repository synchronization remains the preferred path to retest. In
-this validation it ended in **Failed** and did not own the six rules later
-created or updated through the Graph fallback. The separate Graph workflow is
-manual-only, restricted to `main`, and requires its own exact confirmation.
-The native and Graph workflows now share the
-`nls-gigawiper-custom-detection-writer` concurrency group, so GitHub cannot run
-the two writer jobs simultaneously. The validated runs were also serialized:
-the canary fallback completed, the latest native retry then completed in
-**Failed**, and the full-pack fallback began only
-after that retry ended. The paths were never concurrent. Keep that separation
-when retesting; the lock prevents overlap, but it does not decide which path
-should own the rules.
+deploy it. The only active custom-detection writer checked into
+`.github/workflows` is the manual Graph fallback. It is restricted to `main`,
+requires an exact confirmation, and retains the stable
+`nls-gigawiper-custom-detection-writer` concurrency lock.
+
+The connection-specific native workflow and helper used during validation are
+retained under [`evidence/generated/sentinel-repository/`](evidence/generated/sentinel-repository/)
+for provenance only. They contain non-secret identifiers for the original lab
+and are intentionally not active or reusable. Native Sentinel Repository
+synchronization remains the preferred path to retest, but a new connection in
+your environment must generate a fresh workflow and helper. Review and harden
+those generated files before use, and never run a native writer concurrently
+with the Graph fallback. In this validation, the native path ended in
+**Failed** and did not own the six rules later created or updated through the
+Graph fallback. The validated runs were serialized: the canary fallback
+completed, the latest native retry completed in **Failed**, and the full-pack
+fallback began only after that retry ended. Serialization prevents overlap; it
+does not decide which path should own the rules.
 
 ## Detection pack
 
@@ -82,6 +88,14 @@ should own the rules.
 
 All six exact IDs were read back after the successful fallback deployment.
 Every rule had zero automated response actions; the canary remained disabled.
+
+> **ATT&CK taxonomy compatibility:** During this validation, Microsoft custom-
+> detection validation accepted the legacy `T1070.001` mapping on NLS-GW-003.
+> The current MITRE ATT&CK catalog lists **Clear Windows Event Logs** as
+> [`T1685.005`](https://attack.mitre.org/techniques/T1685/005/). The checked-in
+> Bicep retains the provider-validated legacy value until the current mapping is
+> tested against the preview provider; this is compatibility evidence, not a
+> claim that `T1070.001` is the current canonical ATT&CK identifier.
 
 ## Prerequisites
 
@@ -131,8 +145,10 @@ The test compiles every Bicep file and verifies:
   `range()` / `mv-expand` time keys instead of a device-wide cross join;
 - safe telemetry generation refuses collisions, validates ownership before
   cleanup, removes only its registry marker value, and checks native exit codes;
-- native and fallback writers are manual, mutually serialized, version-pinned,
-  and refuse to update an existing Graph rule that has response actions; and
+- the tenant-specific native files are retained outside the active workflow
+  directory, no native writer remains active, and the sole active Graph writer
+  remains manual, confirmation-gated, version-pinned, and refuses to update an
+  existing rule that has response actions; and
 - no destructive commands appear in the safe telemetry script.
 
 To execute all ten constructed positive/negative cases through Defender's
@@ -154,12 +170,21 @@ never written to the repository, test output, or deployment outputs.
 1. Fork or clone this repository into a GitHub repository you control.
 2. In the Microsoft Defender portal, open **Microsoft Sentinel** > **Content
    management** > **Repositories**.
-3. Create or edit the Repository connection.
+3. Create a new Repository connection for your repository and environment.
 4. Select **Custom Detection Rules** as a content type.
-5. Disable the Graph fallback, then manually dispatch the generated native
-   workflow from `main` with `DEPLOY_NATIVE_SENTINEL_CONTENT`.
-6. Inspect the synchronization result before confirming rules under **Hunting**
+5. Review the freshly generated workflow and helper. Before allowing a native
+   write, make it manual-only, add an exact confirmation and a `main` guard, pin
+   third-party actions, and serialize it with
+   `nls-gigawiper-custom-detection-writer`.
+6. Ensure the Graph fallback is disabled and has no active or queued writer
+   run, then explicitly authorize the fresh native workflow.
+7. Inspect the synchronization result before confirming rules under **Hunting**
    > **Custom detection rules**.
+
+Do not copy or dispatch the files under
+`evidence/generated/sentinel-repository/`. They were generated for the original
+connection, include its environment-specific identifiers, and are retained
+only to support the recorded validation result.
 
 In this validation, the native path stopped at provider validation and the
 Repository status became visibly **Failed**. It did not create or take ownership
@@ -197,6 +222,15 @@ properties, and performs an exact-ID GET followed by POST or PATCH through the
 official Microsoft Graph beta custom-detection API. It then reads each stable
 ID back and verifies the desired status, schedule, KQL, alert metadata, MITRE
 mapping, host mapping, and absence of response actions.
+
+This is the repository's only active custom-detection writer. Public reuse
+requires your own dedicated single-tenant Entra application, federated GitHub
+OIDC credential, `custom-detection-fallback` environment, and environment
+variables; no identity or authorization from the original lab is reusable.
+`Plan` is local and non-mutating. `Inspect` performs exact-ID reads. `Apply`
+changes custom-detection objects in the tenant named by your environment and
+therefore remains restricted to `main`, the protected environment, and the
+exact `DEPLOY_PREVIEW_FALLBACK` confirmation.
 
 Live validation completed in two manual runs: canary run `29180371449` passed,
 then full-pack run `29180593038` updated and read back all six exact IDs. The
@@ -418,6 +452,7 @@ Never use complete-mode resource-group deployment as a cleanup shortcut.
 - [Update a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-update?view=graph-rest-beta)
 - [Primary and secondary Sentinel workspaces in the Defender portal](https://learn.microsoft.com/en-us/azure/sentinel/workspaces-defender-portal)
 - [Create custom detection rules](https://learn.microsoft.com/en-us/defender-xdr/custom-detection-rules)
+- [MITRE ATT&CK: Clear Windows Event Logs](https://attack.mitre.org/techniques/T1685/005/)
 
 ## License
 

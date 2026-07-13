@@ -1,3 +1,9 @@
+# RETAINED VALIDATION ARTIFACT - NOT AN ACTIVE OR REUSABLE WORKFLOW.
+# This file was generated for one specific Sentinel Repository connection and
+# preserves the July 2026 native-path evidence. It is intentionally outside
+# .github/workflows. Create a new Repository connection in your own environment
+# and review its freshly generated workflow; do not move, copy, or run this one.
+
 name: Deploy Content to sentinel-federation-eus2-law [51af5a44-e148-40f0-b250-6457efb89a6c]
 # Note: This workflow will deploy everything in the root directory.
 # To deploy content only from a specific path (for example SentinelContent):

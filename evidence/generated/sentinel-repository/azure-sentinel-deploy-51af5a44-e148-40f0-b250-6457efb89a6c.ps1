@@ -1,3 +1,9 @@
+# RETAINED VALIDATION ARTIFACT - NOT AN ACTIVE OR REUSABLE HELPER.
+# This generated script belongs to the connection-specific workflow retained
+# beside it as July 2026 evidence. A new Sentinel Repository connection must
+# generate its own workflow and helper; do not copy this file into an active
+# workflow directory.
+
 ## Globals ##
 $CloudEnv = $Env:cloudEnv
 $ResourceGroupName = $Env:resourceGroupName

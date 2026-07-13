@@ -54,7 +54,7 @@ foreach ($file in $files) {
         throw "Compiled custom detection query is empty in $($file.Name)."
     }
 
-    $projectMatches = [regex]::Matches($queryText, '(?im)^\s*\|\s*project\s+([^\r\n]+)$')
+    $projectMatches = [regex]::Matches($queryText, '(?im)^\s*\|\s*project\s+([^\r\n]+)\r?$')
     if ($projectMatches.Count -eq 0) {
         throw "Compiled query has no final project clause in $($file.Name)."
     }
@@ -413,33 +413,65 @@ foreach ($contract in $fallbackContracts.GetEnumerator()) {
     }
 }
 
-$nativeWorkflowFile = Join-Path $root '.github\workflows\sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c.yml'
+$retainedNativeRoot = Join-Path $root 'evidence\generated\sentinel-repository'
+$nativeWorkflowFile = Join-Path $retainedNativeRoot 'sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c.yml'
 $nativeWorkflow = Get-Content -LiteralPath $nativeWorkflowFile -Raw
-$nativeHelperFile = Join-Path $root '.github\workflows\azure-sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c.ps1'
+$nativeHelperFile = Join-Path $retainedNativeRoot 'azure-sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c.ps1'
 $nativeHelper = Get-Content -LiteralPath $nativeHelperFile -Raw
+$activeWorkflowRoot = Join-Path $root '.github\workflows'
+$activeWorkflowFiles = @(Get-ChildItem -LiteralPath $activeWorkflowRoot -File | Where-Object {
+    $_.Extension -in @('.yml', '.yaml', '.ps1')
+})
+$activeWorkflowContent = ($activeWorkflowFiles | ForEach-Object {
+    Get-Content -LiteralPath $_.FullName -Raw
+}) -join "`n"
+$activeWriterFiles = @($activeWorkflowFiles | Where-Object {
+    (Get-Content -LiteralPath $_.FullName -Raw) -match 'Deploy-CustomDetectionsGraph\.ps1|DEPLOY_NATIVE_SENTINEL_CONTENT'
+})
+$legacyNativeWorkflowFile = Join-Path $activeWorkflowRoot 'sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c.yml'
+$legacyNativeHelperFile = Join-Path $activeWorkflowRoot 'azure-sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c.ps1'
 $validateWorkflow = Get-Content -LiteralPath (Join-Path $root '.github\workflows\validate.yml') -Raw
 $nativeUses = @([regex]::Matches($nativeWorkflow, '(?m)^\s*uses:\s*([^\s#]+)') | ForEach-Object { $_.Groups[1].Value })
 $nativeConcurrency = [regex]::Match($nativeWorkflow, '(?m)^\s*group:\s*([^\s#]+)\s*$').Groups[1].Value
 $fallbackConcurrency = [regex]::Match($fallbackWorkflow, '(?m)^\s*group:\s*([^\s#]+)\s*$').Groups[1].Value
 $workflowContracts = [ordered]@{
-    'native workflow is manual-only' = $nativeWorkflow -match '(?m)^\s*workflow_dispatch:' -and
+    'native files are retained outside the active workflow directory' =
+        $nativeWorkflowFile.StartsWith($retainedNativeRoot, [StringComparison]::OrdinalIgnoreCase) -and
+        $nativeHelperFile.StartsWith($retainedNativeRoot, [StringComparison]::OrdinalIgnoreCase)
+    'retained native files carry non-reuse provenance notices' =
+        $nativeWorkflow -match 'RETAINED VALIDATION ARTIFACT - NOT AN ACTIVE OR REUSABLE WORKFLOW' -and
+        $nativeHelper -match 'RETAINED VALIDATION ARTIFACT - NOT AN ACTIVE OR REUSABLE HELPER' -and
+        $nativeWorkflow -match 'Create a new Repository connection in your own environment' -and
+        $nativeHelper -match 'must\s*\r?\n?#?\s*generate its own workflow and helper'
+    'no native writer remains active' = -not (Test-Path -LiteralPath $legacyNativeWorkflowFile) -and
+        -not (Test-Path -LiteralPath $legacyNativeHelperFile) -and
+        $activeWorkflowContent -notmatch 'DEPLOY_NATIVE_SENTINEL_CONTENT' -and
+        $activeWorkflowContent -notmatch 'azure-sentinel-deploy-51af5a44-e148-40f0-b250-6457efb89a6c'
+    'Graph fallback is the only active custom-detection writer' = $activeWriterFiles.Count -eq 1 -and
+        $activeWriterFiles[0].FullName -eq $fallbackWorkflowFile
+    'retained native workflow was manual-only' = $nativeWorkflow -match '(?m)^\s*workflow_dispatch:' -and
         $nativeWorkflow -notmatch '(?m)^\s*(push|pull_request):'
-    'native workflow requires exact confirmation' = $nativeWorkflow -match "inputs\.confirmation == 'DEPLOY_NATIVE_SENTINEL_CONTENT'"
-    'native workflow restricts deployment to main' = $nativeWorkflow -match "github\.ref == 'refs/heads/main'"
-    'native workflow actions are SHA-pinned' = $nativeUses.Count -gt 0 -and
+    'retained native workflow required exact confirmation and main' =
+        $nativeWorkflow -match "inputs\.confirmation == 'DEPLOY_NATIVE_SENTINEL_CONTENT'" -and
+        $nativeWorkflow -match "github\.ref == 'refs/heads/main'"
+    'retained native workflow actions are SHA-pinned' = $nativeUses.Count -gt 0 -and
         @($nativeUses | Where-Object { $_ -notmatch '@[0-9a-f]{40}$' }).Count -eq 0 -and
         ([regex]::Matches($nativeWorkflow, 'azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5')).Count -eq 3 -and
         ([regex]::Matches($nativeWorkflow, 'azure/powershell@53dd145408794f7e80f97cfcca04155c85234709')).Count -eq 1
-    'native workflow uses a fixed Az version' = $nativeWorkflow -match "(?m)^\s*azPSVersion:\s*'[0-9]+\.[0-9]+\.[0-9]+'\s*$"
-    'native workflow installs the validated Bicep CLI' = $nativeWorkflow -match '(?m)^\s*run:\s*az bicep install --version v0\.45\.6\s*$'
-    'native helper builds through Azure CLI Bicep' = $nativeHelper -match 'az bicep build --file \$path --stdout --only-show-errors' -and
+    'retained native workflow uses fixed tool versions' =
+        $nativeWorkflow -match "(?m)^\s*azPSVersion:\s*'[0-9]+\.[0-9]+\.[0-9]+'\s*$" -and
+        $nativeWorkflow -match '(?m)^\s*run:\s*az bicep install --version v0\.45\.6\s*$'
+    'retained native helper builds through Azure CLI Bicep' = $nativeHelper -match 'az bicep build --file \$path --stdout --only-show-errors' -and
         $nativeHelper -notmatch '(?m)^\s*\$templateObject\s*=\s*bicep build\s'
-    'validation checkout is SHA-pinned' = $validateWorkflow -match 'actions/checkout@[0-9a-f]{40}'
-    'validation Bicep CLI is version-pinned' = $validateWorkflow -match 'az bicep install --version v[0-9]+\.[0-9]+\.[0-9]+'
-    'native and Graph writers share a concurrency lock' = $nativeConcurrency -eq 'nls-gigawiper-custom-detection-writer' -and
-        $fallbackConcurrency -eq $nativeConcurrency -and
-        $nativeWorkflow -match '(?m)^\s*cancel-in-progress:\s*false\s*$' -and
+    'validation dependencies are pinned' = $validateWorkflow -match 'actions/checkout@[0-9a-f]{40}' -and
+        $validateWorkflow -match 'az bicep install --version v[0-9]+\.[0-9]+\.[0-9]+'
+    'active Graph writer retains the validated serialization lock' =
+        $fallbackConcurrency -eq 'nls-gigawiper-custom-detection-writer' -and
         $fallbackWorkflow -match '(?m)^\s*cancel-in-progress:\s*false\s*$'
+    'retained native artifact records the historical shared lock' =
+        $nativeConcurrency -eq 'nls-gigawiper-custom-detection-writer' -and
+        $fallbackConcurrency -eq $nativeConcurrency -and
+        $nativeWorkflow -match '(?m)^\s*cancel-in-progress:\s*false\s*$'
 }
 foreach ($contract in $workflowContracts.GetEnumerator()) {
     if (-not $contract.Value) {

@@ -12,6 +12,15 @@ This file separates observed evidence from planned or synthetic validation.
 > was not applied to the six live Graph-fallback objects, so their retained
 > deployment read-back remains evidence for the validation revision.
 
+> **Public-release workflow posture:** The original connection-generated native
+> workflow and helper now live under
+> `evidence/generated/sentinel-repository/` with explicit non-reuse notices.
+> They remain intact as connection-specific evidence but are outside
+> `.github/workflows` and cannot be dispatched by GitHub Actions. The bounded,
+> manual Graph fallback is the only active custom-detection writer. A native
+> retest requires a new Repository connection to generate fresh files for the
+> new environment.
+
 | Claim | Evidence | Status | Date |
 |---|---|---|---|
 | Six templates compile with Bicep | Local `az bicep build --stdout` | Passed | 2026-07-11 |
@@ -31,6 +40,7 @@ This file separates observed evidence from planned or synthetic validation.
 | Dedicated Graph fallback identity | Entra app-role and Azure RBAC audits plus GitHub OIDC configuration | Passed: only Graph application permission `CustomDetection.ReadWrite.All`, environment-scoped federated OIDC, no stored client secret, and zero Azure role assignments | 2026-07-12 |
 | Deployment-path sequencing | GitHub Actions run order and completion timestamps | Passed: canary run `29180371449` completed, native retry `29180501340` then completed in `Failed`, and full-pack run `29180593038` began afterward; native and fallback paths were never concurrent | 2026-07-12 |
 | Post-audit writer serialization | Local workflow contracts plus PR validation run `29275395872` at commit `0326383` | Passed at the published PR head: both deployment workflows are manual and confirmation-gated, share the exact `nls-gigawiper-custom-detection-writer` concurrency group with `cancel-in-progress: false`, and therefore cannot execute their writer jobs concurrently | 2026-07-13 |
+| Public-release active-writer posture | Repository layout plus local `Test-Lab.ps1` workflow contracts | Passed: the tenant-specific generated native files are retained outside `.github/workflows` with non-reuse notices; no active native writer remains; the manual Graph fallback is the only active custom-detection writer | 2026-07-13 |
 | Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six current rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
 | Defender portal rule-list visibility | Unified custom-detection page searched by exact `NLS-GW` prefix before and after the separate portal-native validation rules were created | Observed, cause pending: the historical pre-portal check returned **0 items** / **No data available**; the follow-up filter returned exactly three rows, all of them `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004`. None of the six Graph-fallback objects appeared, and no cause is claimed. | 2026-07-12 |
 | Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default inbound deny with no custom inbound NSG rules | 2026-07-11 |
@@ -67,6 +77,16 @@ objects. The live Graph rule API returned `InvalidInput` because the preview
 currently accepts only one tactic per rule. The pack now keeps the primary
 tactic for each rule and `Test-Lab.ps1` enforces that runtime contract.
 
+### ATT&CK taxonomy compatibility note
+
+During this validation, Microsoft custom-detection validation accepted the
+legacy `T1070.001` mapping used by NLS-GW-003. The current MITRE ATT&CK catalog
+lists **Clear Windows Event Logs** as
+[`T1685.005`](https://attack.mitre.org/techniques/T1685/005/). The checked-in
+Bicep retains the provider-validated legacy value until `T1685.005` is tested
+against the preview provider. This records a provider-compatibility boundary;
+it does not describe `T1070.001` as the current canonical ATT&CK identifier.
+
 ## Native Repository deployment observations
 
 The Repository connection targeted `main` and selected `CustomDetection`. Its
@@ -95,11 +115,14 @@ Repository run and tracking IDs for Microsoft Support.
 The bounded fallback uses a separate Graph-only application with no Azure role
 assignments. Its workflow is manual, restricted to `main`, compiles the same
 Bicep source, creates or updates only the six stable IDs, performs no deletion,
-and verifies each rule by exact ID. Native Repository synchronization and the
-fallback must not run concurrently. The post-audit workflow revisions enforce
-that invariant with a shared GitHub concurrency group. Serialization prevents
-overlapping writers; it does not choose an owner or make a queued ownership
-transition safe by itself.
+and verifies each rule by exact ID. During validation, the hardened native and
+Graph revisions shared a GitHub concurrency group and did not run concurrently.
+For public release, the connection-specific native files are retained outside
+the active workflow directory, leaving the Graph fallback as the only active
+writer. It retains the stable concurrency name so a new connection-generated
+native workflow can be deliberately hardened to share it before an ownership
+transition. Serialization prevents overlapping writers; it does not choose an
+owner or make a queued ownership transition safe by itself.
 
 Canary workflow run `29180371449` succeeded first. Full-pack workflow run
 `29180593038` then updated and read back all six exact IDs: the canary remained
