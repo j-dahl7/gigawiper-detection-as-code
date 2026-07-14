@@ -21,6 +21,12 @@ This file separates observed evidence from planned or synthetic validation.
 > retest requires a new Repository connection to generate fresh files for the
 > new environment.
 
+> **Publication posture:** The companion
+> [case study](https://nineliveszerotrust.com/blog/gigawiper-detections-as-code/)
+> and [lab guide](https://nineliveszerotrust.com/labs/gigawiper-detection-as-code/)
+> are published. Focused production PR #340 was merged; the earlier editorial
+> review PR #339 was closed without merge and is retained only as provenance.
+
 | Claim | Evidence | Status | Date |
 |---|---|---|---|
 | Six templates compile with Bicep | Local `az bicep build --stdout` | Passed | 2026-07-11 |
@@ -200,8 +206,8 @@ unified custom-detection wizards displayed `Supported entities could not be
 loaded` and left **Add assets** disabled. No 005 portal rule was created, and no
 005 alert exists or is claimed. This is recorded as an observed wizard outcome
 with no assigned root cause, not as evidence that aggregate custom detections or
-NLS-GW-005 are unsupported. Screenshots of the live portal evidence are stored
-with the companion blog draft.
+NLS-GW-005 are unsupported. Screenshots of the live portal evidence are
+published with the companion case study linked above.
 
 ## Endpoint activation finding
 
@@ -226,6 +232,23 @@ to Public Documents, renamed the inert copies from `.tmp` to `.candy`, and never
 executed them. Seven `FileRenamed` rows arrived after a longer ingestion delay,
 and the exact NLS-GW-005 aggregation returned one seven-file match. The checked-
 in harness uses this observed path and still retains synthetic fixtures.
+
+## Post-validation cleanup
+
+Read-only inventory on July 14, 2026 confirmed zero Sentinel Repository
+connections, zero matching connection-created identities or service principals,
+zero matching role assignments, zero connection secrets, and zero active
+generated runs. The credential-less `nls-gigawiper-validation-20260711`
+diagnostic application and service principal were then deleted, and the exact
+24-resource disposable endpoint resource group was deleted after evidence
+capture. Generated PR #6 was closed, only its generated side branch was deleted,
+and the two stale generated workflow registrations were disabled after their
+exact bot commits were recorded in the local native-retest support package.
+
+The six Graph-fallback objects, the three portal-native LIVE rules and their
+recorded alerts, the constrained fallback application, and the protected
+three-file canary evidence branch remain retained. This cleanup does not change
+their evidence level or attribute alerts to the Graph or native paths.
 
 ## Evidence levels
 

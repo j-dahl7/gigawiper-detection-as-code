@@ -10,8 +10,10 @@ the native-path result observed in this validation.
 > Windows Security/System/Application logs. Destructive stages are validated
 > with synthetic rows only.
 
-For the complete live-result narrative, exact alert IDs, claim boundaries, and
-editorial notes, see the dated
+For the complete live-result narrative, see the published
+[case study](https://nineliveszerotrust.com/blog/gigawiper-detections-as-code/)
+and its shorter [lab guide](https://nineliveszerotrust.com/labs/gigawiper-detection-as-code/).
+Exact alert IDs, claim boundaries, and editorial provenance remain in the dated
 [validation handoff](docs/HANDOFF-2026-07-12.md).
 
 ## What this proves
@@ -252,7 +254,7 @@ does not attribute a particular alert or incident to a Graph-fallback rule.
 Before the separate portal-native validation rules existed, an exact `NLS-GW`
 search in the unified Defender custom-detection page returned **0 items** and
 **No data available**, while exact-ID Graph read-back succeeded. A screenshot of
-that historical result is captured in the companion site draft. A follow-up
+that historical result is captured in the published companion article. A follow-up
 exact-prefix filter after portal-native validation returned exactly three rows,
 all of them the separate `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and
 `NLS-GW-LIVE-004` objects. None of the six Graph-fallback rules appeared. Their
@@ -337,8 +339,8 @@ custom-detection wizards repeatedly displayed **Supported entities could not be
 loaded** and left **Add assets** disabled. No portal-native 005 rule was created,
 and no 005 alert is claimed. This is recorded as an observed wizard outcome with
 no assigned root cause, not as evidence that aggregate custom detections or
-NLS-GW-005 are unsupported. The live portal screenshots are stored with the
-companion blog draft.
+NLS-GW-005 are unsupported. The live portal screenshots are published with the
+companion [case study](https://nineliveszerotrust.com/blog/gigawiper-detections-as-code/).
 
 ## Direct Bicep alternative
 
@@ -441,6 +443,13 @@ Microsoft-generated alert.
    credential, but its tenant-wide Graph grants should not remain after
    validation.
 7. Delete only the disposable Azure resource group created for endpoint testing.
+
+**Cleanup status (July 14, 2026):** the Repository connections and their scoped
+identities/secrets were removed, the residual validation app in step 6 was
+deleted, and the exact disposable endpoint resource group in step 7 was deleted
+after evidence capture. The six Graph-fallback objects, three portal-native LIVE
+rules and alerts, and the constrained fallback app in steps 3-5 remain retained
+evidence and are not represented as cleaned up.
 
 Never use complete-mode resource-group deployment as a cleanup shortcut.
 
