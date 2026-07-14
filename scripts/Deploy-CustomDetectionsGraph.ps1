@@ -238,23 +238,59 @@ function ConvertTo-UtcIsoTimestamp {
     }
 }
 
+function Get-OptionalObjectProperty {
+    param(
+        [AllowNull()]
+        [object]$InputObject,
+
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+
+    if ($null -eq $InputObject) {
+        return $null
+    }
+    if ($InputObject -is [System.Collections.IDictionary]) {
+        if ($InputObject.Contains($Name)) {
+            return $InputObject[$Name]
+        }
+        return $null
+    }
+
+    $property = $InputObject.PSObject.Properties[$Name]
+    if ($null -eq $property) {
+        return $null
+    }
+    return $property.Value
+}
+
 function New-DetectionInspection {
     param(
         [Parameter(Mandatory)]
         [object]$Rule
     )
 
-    $failureReason = ([string]$Rule.lastRunDetails.failureReason -replace '[\r\n]+', ' ').Trim()
+    $schedule = Get-OptionalObjectProperty -InputObject $Rule -Name 'schedule'
+    $lastRunDetails = Get-OptionalObjectProperty -InputObject $Rule -Name 'lastRunDetails'
+    $failureReason = ([string](
+            Get-OptionalObjectProperty -InputObject $lastRunDetails -Name 'failureReason'
+        ) -replace '[\r\n]+', ' ').Trim()
     [pscustomobject][ordered]@{
-        Id = [string]$Rule.id
-        Status = [string]$Rule.status
-        Frequency = [string]$Rule.schedule.frequency
-        NextRunDateTime = ConvertTo-UtcIsoTimestamp -Value $Rule.schedule.nextRunDateTime
-        LastRunStatus = [string]$Rule.lastRunDetails.status
-        LastRunDateTime = ConvertTo-UtcIsoTimestamp -Value $Rule.lastRunDetails.lastRunDateTime
-        LastRunErrorCode = [string]$Rule.lastRunDetails.errorCode
+        Id = [string](Get-OptionalObjectProperty -InputObject $Rule -Name 'id')
+        Status = [string](Get-OptionalObjectProperty -InputObject $Rule -Name 'status')
+        Frequency = [string](Get-OptionalObjectProperty -InputObject $schedule -Name 'frequency')
+        NextRunDateTime = ConvertTo-UtcIsoTimestamp -Value (
+            Get-OptionalObjectProperty -InputObject $schedule -Name 'nextRunDateTime'
+        )
+        LastRunStatus = [string](Get-OptionalObjectProperty -InputObject $lastRunDetails -Name 'status')
+        LastRunDateTime = ConvertTo-UtcIsoTimestamp -Value (
+            Get-OptionalObjectProperty -InputObject $lastRunDetails -Name 'lastRunDateTime'
+        )
+        LastRunErrorCode = [string](Get-OptionalObjectProperty -InputObject $lastRunDetails -Name 'errorCode')
         LastRunFailureReason = $failureReason
-        ResponseActionCount = Get-DetectionResponseActionCount -DetectionAction $Rule.detectionAction
+        ResponseActionCount = Get-DetectionResponseActionCount -DetectionAction (
+            Get-OptionalObjectProperty -InputObject $Rule -Name 'detectionAction'
+        )
     }
 }
 
@@ -376,8 +412,20 @@ if ($Mode -eq 'Inspect') {
             $response = Invoke-DetectionGraphRequest `
                 -Method GET `
                 -Uri $ruleUri `
-                -AllowedStatus @(200, 404) `
+                -AllowedStatus @(200, 400, 404) `
                 -SanitizedErrors
+            if ($response.StatusCode -eq 400) {
+                # lastRunDetails is deprecated and scheduled for removal. Keep
+                # its current evidence fields when available, but retry using
+                # only durable metadata when Graph no longer accepts it.
+                $ruleUri = '{0}/{1}?$select=id,status,schedule,detectionAction' -f `
+                    $graphBaseUri, [uri]::EscapeDataString($ruleId)
+                $response = Invoke-DetectionGraphRequest `
+                    -Method GET `
+                    -Uri $ruleUri `
+                    -AllowedStatus @(200, 404) `
+                    -SanitizedErrors
+            }
             if ($response.StatusCode -eq 404) {
                 throw "Exact custom-detection rule '$ruleId' was not found."
             }

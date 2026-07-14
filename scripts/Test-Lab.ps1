@@ -35,7 +35,7 @@ foreach ($file in $files) {
         throw "Preview custom detections currently accept one MITRE tactic per rule: $($file.Name)."
     }
 
-    $compileOutput = & az bicep build --file $file.FullName --stdout 2>&1
+    $compileOutput = & az bicep build --file $file.FullName --stdout --only-show-errors 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "Bicep compilation failed for $($file.Name):`n$($compileOutput -join "`n")"
     }
@@ -94,9 +94,14 @@ if (($displayNames | Sort-Object -Unique).Count -ne $displayNames.Count) {
     throw 'Duplicate custom detection display names found.'
 }
 
-$infraOutput = & az bicep build --file $infraFile --stdout 2>&1
+$infraOutput = & az bicep build --file $infraFile --stdout --only-show-errors 2>&1
 if ($LASTEXITCODE -ne 0) {
     throw "Infrastructure Bicep compilation failed:`n$($infraOutput -join "`n")"
+}
+$testLabContent = Get-Content -LiteralPath $PSCommandPath -Raw
+if ($testLabContent -notmatch [regex]::Escape('& az bicep build --file $file.FullName --stdout --only-show-errors') -or
+    $testLabContent -notmatch [regex]::Escape('& az bicep build --file $infraFile --stdout --only-show-errors')) {
+    throw 'Lab validation must suppress non-error Azure CLI output before parsing compiled Bicep JSON.'
 }
 $infraContent = Get-Content -LiteralPath $infraFile -Raw
 if ($infraContent -notmatch 'securityRules:\s*\[\]') {
@@ -372,7 +377,13 @@ $fallbackContracts = [ordered]@{
     'app-only permission guidance' = $graphFallback -match 'CustomDetection\.ReadWrite\.All'
     'manual read-only inspection' = $graphFallback -match "ValidateSet\('Plan', 'Apply', 'Inspect'\)" -and $fallbackWorkflow -match 'INSPECT_PREVIEW_FALLBACK'
     'inspection uses exact-ID GET only' = $inspectBlock -match 'EscapeDataString' -and $inspectBlock -match '(?m)-Method GET' -and $inspectBlock -notmatch '(?m)-Method (POST|PATCH)'
-    'inspection requests metadata only' = $inspectBlock -match '\?\$select=id,status,schedule,lastRunDetails,detectionAction'
+    'inspection requests only allowlisted metadata and tolerates deprecated removal' =
+        $inspectBlock -match '\?\$select=id,status,schedule,lastRunDetails,detectionAction' -and
+        $inspectBlock -match '\?\$select=id,status,schedule,detectionAction' -and
+        $inspectBlock -match '-AllowedStatus @\(200, 400, 404\)' -and
+        $inspectBlock -match 'if\s*\(\$response\.StatusCode\s*-eq\s*400\)' -and
+        $graphFallback -match 'function\s+Get-OptionalObjectProperty' -and
+        $graphFallback -match 'Get-OptionalObjectProperty\s+-InputObject\s+\$Rule\s+-Name\s+''lastRunDetails'''
     'inspection output is allowlisted' = @(
         'Id',
         'Status',
