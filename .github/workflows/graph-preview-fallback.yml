@@ -9,12 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: Read scheduler metadata or apply the preview fallback
+        description: Read, apply, or retire the scoped GigaWiper lab rules
         required: true
         type: choice
         options:
           - Inspect
           - Apply
+          - Retire
         default: Inspect
       scope:
         description: Rules to inspect or apply
@@ -25,7 +26,7 @@ on:
           - All
         default: Canary
       confirmation:
-        description: Type INSPECT_PREVIEW_FALLBACK or DEPLOY_PREVIEW_FALLBACK
+        description: Type the exact confirmation required for the selected operation
         required: true
         type: string
 
@@ -50,7 +51,11 @@ jobs:
       ${{ (inputs.operation == 'Inspect' && inputs.confirmation == 'INSPECT_PREVIEW_FALLBACK') ||
           (github.ref == 'refs/heads/main' &&
            inputs.operation == 'Apply' &&
-           inputs.confirmation == 'DEPLOY_PREVIEW_FALLBACK') }}
+           inputs.confirmation == 'DEPLOY_PREVIEW_FALLBACK') ||
+          (github.ref == 'refs/heads/main' &&
+           inputs.operation == 'Retire' &&
+           inputs.scope == 'All' &&
+           inputs.confirmation == 'RETIRE_GIGAWIPER_LAB_ARTIFACTS') }}
     runs-on: windows-latest
     environment: custom-detection-fallback
     steps:
@@ -71,7 +76,7 @@ jobs:
         shell: pwsh
         run: az bicep install --version v0.45.6
 
-      - name: Inspect or apply custom detections
+      - name: Inspect, apply, or retire scoped custom detections
         shell: pwsh
         env:
           RUN_MODE: ${{ inputs.operation }}
@@ -85,7 +90,12 @@ jobs:
           Write-Output "::add-mask::$token"
           try {
             $env:GRAPH_ACCESS_TOKEN = $token
-            ./scripts/Deploy-CustomDetectionsGraph.ps1 -Mode $env:RUN_MODE -Scope $env:DEPLOY_SCOPE
+            if ($env:RUN_MODE -eq 'Retire') {
+              ./scripts/Remove-GigaWiperTenantArtifacts.ps1
+            }
+            else {
+              ./scripts/Deploy-CustomDetectionsGraph.ps1 -Mode $env:RUN_MODE -Scope $env:DEPLOY_SCOPE
+            }
           }
           finally {
             Remove-Item Env:GRAPH_ACCESS_TOKEN -ErrorAction SilentlyContinue
