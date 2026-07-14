@@ -16,6 +16,12 @@ and its shorter [lab guide](https://nineliveszerotrust.com/labs/gigawiper-detect
 Exact alert IDs, claim boundaries, and editorial provenance remain in the dated
 [validation handoff](docs/HANDOFF-2026-07-12.md).
 
+> **Retirement status:** Confirmed tenant-side validation artifacts were
+> retired on July 14, 2026, after evidence capture. Portal-list convergence for
+> the three separately created LIVE rules is recorded below rather than
+> inferred. The reusable workflow remains checked in without authorization to
+> the original tenant.
+
 ## What this proves
 
 | Layer | Evidence |
@@ -27,7 +33,7 @@ Exact alert IDs, claim boundaries, and editorial provenance remain in the dated
 | Safe testing | Benign task/registry activity, a custom lab log clear, a filename-only MinIO simulation, and decoy `.candy` renames |
 | Destructive testing | Synthetic KQL fixtures only |
 
-## Architecture
+## Validation-time architecture
 
 ```text
 Pull request
@@ -62,6 +68,12 @@ deploy it. The only active custom-detection writer checked into
 `.github/workflows` is the manual Graph fallback. It is restricted to `main`,
 requires an exact confirmation, and retains the stable
 `nls-gigawiper-custom-detection-writer` concurrency lock.
+
+After the July 14 retirement, the original fallback app, service principal,
+federated credential, Graph grant, and GitHub environment variables were
+removed. The checked-in workflow therefore has no authorization to the
+validation tenant; another operator must supply a separately reviewed identity
+in their own protected environment before reuse.
 
 The connection-specific native workflow and helper used during validation are
 retained under [`evidence/generated/sentinel-repository/`](evidence/generated/sentinel-repository/)
@@ -326,7 +338,7 @@ endpoint telemetry, scheduled and Continuous (NRT) evaluation, alert creation,
 and incident correlation for the separate portal-native rules. The current
 hardened NLS-GW-001 and NLS-GW-005 queries were separately re-run against the
 retained telemetry and each returned the expected single row; no new alert is
-attributed to those revisions, and the six live Graph-fallback objects were not
+attributed to those revisions, and the six then-live Graph-fallback objects were not
 mutated during remediation. This evidence does **not**
 attribute any alert or incident to the native Repository path or a
 Graph-fallback object. The later read-only Graph inspection independently
@@ -447,9 +459,20 @@ Microsoft-generated alert.
 **Cleanup status (July 14, 2026):** the Repository connections and their scoped
 identities/secrets were removed, the residual validation app in step 6 was
 deleted, and the exact disposable endpoint resource group in step 7 was deleted
-after evidence capture. The six Graph-fallback objects, three portal-native LIVE
-rules and alerts, and the constrained fallback app in steps 3-5 remain retained
-evidence and are not represented as cleaned up.
+after evidence capture. The six Graph-fallback objects were then deleted by
+exact ID and returned `404` on independent read-back. The three portal-native
+LIVE-rule deletion dialogs were each completed through their exact Defender
+detail pages; their historical alerts and incident `628` were intentionally
+retained. The fallback app, service principal, federated credential, Graph
+grant, and both GitHub environment variables were removed only after the
+fallback-rule read-back.
+
+During retirement, Graph returned `204` for the three numeric LIVE rule IDs,
+but Defender continued to render the same rule rows and rejected a later
+mutation because the backend no longer resolved the rule. Neither response was
+treated as proof of portal-list convergence; no root cause is assigned.
+The one-time `Retire` input and retirement script were removed after use; the
+reusable fallback workflow again exposes only `Inspect` and `Apply`.
 
 Never use complete-mode resource-group deployment as a cleanup shortcut.
 
@@ -459,6 +482,7 @@ Never use complete-mode resource-group deployment as a cleanup shortcut.
 - [Deploy custom detection rules as code](https://learn.microsoft.com/en-us/azure/sentinel/ci-cd-custom-content#deploy-custom-detection-rules-as-code-preview)
 - [Create a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-post-detectionrules?view=graph-rest-beta)
 - [Update a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-update?view=graph-rest-beta)
+- [Delete a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-delete-detectionrules?view=graph-rest-beta)
 - [Primary and secondary Sentinel workspaces in the Defender portal](https://learn.microsoft.com/en-us/azure/sentinel/workspaces-defender-portal)
 - [Create custom detection rules](https://learn.microsoft.com/en-us/defender-xdr/custom-detection-rules)
 - [MITRE ATT&CK: Clear Windows Event Logs](https://attack.mitre.org/techniques/T1685/005/)
