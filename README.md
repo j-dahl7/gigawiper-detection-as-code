@@ -17,10 +17,10 @@ Exact alert IDs, claim boundaries, and editorial provenance remain in the dated
 [validation handoff](docs/HANDOFF-2026-07-12.md).
 
 > **Retirement status:** Confirmed tenant-side validation artifacts were
-> retired on July 14, 2026, after evidence capture. Portal-list convergence for
-> the three separately created LIVE rules is recorded below rather than
-> inferred. The reusable workflow remains checked in without authorization to
-> the original tenant.
+> retired on July 14, 2026, after evidence capture. The three separately created
+> LIVE rules converged to zero portal rows and direct `404` read-back while their
+> historical alerts and incident were preserved. The reusable workflow remains
+> checked in without authorization to the original tenant.
 
 ## What this proves
 
@@ -269,8 +269,8 @@ search in the unified Defender custom-detection page returned **0 items** and
 that historical result is captured in the published companion article. A follow-up
 exact-prefix filter after portal-native validation returned exactly three rows,
 all of them the separate `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and
-`NLS-GW-LIVE-004` objects. None of the six Graph-fallback rules appeared. Their
-portal-list visibility therefore remains pending, and the evidence does not yet
+`NLS-GW-LIVE-004` objects. None of the six Graph-fallback rules appeared. That
+historical visibility difference remains unexplained; the evidence does not
 distinguish preview replication behavior from portal authorization or UI
 filtering.
 
@@ -462,15 +462,21 @@ deleted, and the exact disposable endpoint resource group in step 7 was deleted
 after evidence capture. The six Graph-fallback objects were then deleted by
 exact ID and returned `404` on independent read-back. The three portal-native
 LIVE-rule deletion dialogs were each completed through their exact Defender
-detail pages; their historical alerts and incident `628` were intentionally
-retained. The fallback app, service principal, federated credential, Graph
-grant, and both GitHub environment variables were removed only after the
-fallback-rule read-back.
+detail pages. A final hard-refreshed `NLS-GW` search then returned **0 items** /
+**No data available**, and direct portal-service reads for rules `151`, `152`,
+and `153` each returned `404`. Exact MDE API reads confirmed that all three
+historical custom alerts remained in incident `628`. The fallback app, service
+principal, federated credential, Graph grant, and both GitHub environment
+variables were removed only after the fallback-rule read-back.
 
-During retirement, Graph returned `204` for the three numeric LIVE rule IDs,
-but Defender continued to render the same rule rows and rejected a later
-mutation because the backend no longer resolved the rule. Neither response was
-treated as proof of portal-list convergence; no root cause is assigned.
+During retirement, Graph initially returned `204` for the three numeric LIVE
+rule IDs while Defender still rendered the rows, and rule `153` completed
+another scheduled run at `2026-07-14T21:53:08Z`. A Disable attempt and the final
+Delete confirmation also produced client-error dialogs that did not establish
+the final state. None of those intermediate responses was treated as proof.
+Convergence was recorded only after the zero-row portal search and three exact
+`404` reads; no root cause is assigned to the delayed or contradictory
+responses.
 The one-time `Retire` input and retirement script were removed after use; the
 reusable fallback workflow again exposes only `Inspect` and `Apply`.
 

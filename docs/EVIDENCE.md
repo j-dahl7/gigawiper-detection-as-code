@@ -54,10 +54,10 @@ This file separates observed evidence from planned or synthetic validation.
 | Post-audit writer serialization | Local workflow contracts plus PR validation run `29275395872` at commit `0326383` | Passed at the published PR head: both deployment workflows are manual and confirmation-gated, share the exact `nls-gigawiper-custom-detection-writer` concurrency group with `cancel-in-progress: false`, and therefore cannot execute their writer jobs concurrently | 2026-07-13 |
 | Public-release active-writer posture | Repository layout plus local `Test-Lab.ps1` workflow contracts | Passed: the tenant-specific generated native files are retained outside `.github/workflows` with non-reuse notices; no active native writer remains; the manual Graph fallback is the only active custom-detection writer | 2026-07-13 |
 | Graph-fallback rule retirement | Exact-ID retirement workflow runs `29368829996` and `29368996155` | Scoped result passed: the initial run preflighted all six fallback identities and received `204` for each exact delete; the follow-up run independently returned `404` for all six exact IDs. Both overall workflows failed closed because LIVE-rule GET results persisted. | 2026-07-14 |
-| Portal-native deletion/convergence | Exact Graph requests plus the Defender detail pages for rules `151`, `152`, and `153` | Observed: Graph returned `204`, but that response was not accepted as portal proof because the same rows remained visible. Each exact portal rule was separately submitted for deletion without touching alerts or incidents. A later Disable mutation on rule `153` returned `Client Error` / `Error enabling rules`; that error does not prove all three rules absent. Portal-list convergence remained pending at the last check; no cause is claimed. | 2026-07-14 |
+| Portal-native deletion/convergence | Exact Graph requests, exact Defender detail-page deletion confirmations, direct portal-service read-back, a hard-refreshed rule-list search, and exact MDE alert reads | Passed after contradictory intermediate states: Graph returned `204` while the same three rows remained visible, and rule `153` still completed a scheduled run at `2026-07-14T21:53:08Z`. A Disable attempt and the final Delete confirmation produced client-error dialogs, so neither was treated as proof. Direct portal-service reads then returned `404` for rules `153`, `152`, and `151` at `22:00:33Z`, `22:01:39Z`, and `22:01:52Z`; an exact `NLS-GW` search returned **0 items** / **No data available** at `22:02:39Z`. Exact MDE API reads still returned all three historical custom alerts in incident `628`. No cause is assigned to the delayed or contradictory responses. | 2026-07-14 |
 | Fallback identity retirement | Exact Entra app/service-principal audit, Azure role audit, and GitHub environment read-back | Passed after fallback-rule read-back: app and service principal absent; federated credential and `CustomDetection.ReadWrite.All` grant removed with the app; zero Azure RBAC remained; environment retained with zero variables and zero secrets | 2026-07-14 |
 | Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six validation-time rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
-| Defender portal rule-list visibility | Unified custom-detection page searched by exact `NLS-GW` prefix before and after the separate portal-native validation rules were created | Observed, cause pending: the historical pre-portal check returned **0 items** / **No data available**; the follow-up filter returned exactly three rows, all of them `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004`. None of the six Graph-fallback objects appeared, and no cause is claimed. | 2026-07-12 |
+| Defender portal rule-list visibility | Unified custom-detection page searched by exact `NLS-GW` prefix before and after the separate portal-native validation rules were created | Observed, cause unassigned: the historical pre-portal check returned **0 items** / **No data available**; the follow-up filter returned exactly three rows, all of them `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004`. None of the six Graph-fallback objects appeared. The later cleanup convergence is recorded separately above. | 2026-07-12 |
 | Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default inbound deny with no custom inbound NSG rules | 2026-07-11 |
 | Safe endpoint jobs executed | Azure managed Run Command instance views | Passed: task/registry, custom-log clear, filename-only `mc.exe`, and eight decoy renames all exited 0 | 2026-07-11 |
 | Live KQL validation | Defender XDR Advanced Hunting using the exact checked-in queries | Passed for NLS-GW-001, NLS-GW-003, NLS-GW-004, and NLS-GW-005 against real benign events; a July 12 12-hour `DeviceProcessEvents` recheck returned two real `mc.exe` rows on `nls-gw-lab`, including the safe marker text, from a harness that performed no network transfer | 2026-07-12 |
@@ -257,14 +257,18 @@ exact bot commits were recorded in the local native-retest support package.
 
 Later on July 14, the six Graph-fallback objects were deleted by exact ID and
 independently returned `404`. The three portal-native rules were separately
-submitted for deletion through their exact Defender detail pages. Their recorded
-alerts and incident `628` remain retained evidence. The fallback application,
-service principal, OIDC credential, Graph grant, and GitHub environment
-variables were removed only after fallback-rule read-back. Defender still
-rendered the same LIVE-rule rows during the immediate post-delete check, but a
-subsequent Disable mutation on rule `153` returned `Client Error` / `Error
-enabling rules`; that error is not generalized into proof that all three rules
-are absent. Portal-list convergence is recorded as pending rather than inferred.
+submitted for deletion through their exact Defender detail pages. Graph's
+earlier `204` responses were not accepted as portal proof because the rows
+remained visible and rule `153` completed another scheduled run at
+`2026-07-14T21:53:08Z`. A Disable attempt returned `Client Error` / `Error
+enabling rules`, and the final Delete confirmation returned `Client Error` /
+`Error deleting detection rules`; neither error was treated as evidence of
+success or failure. Direct portal-service reads subsequently returned `404` for
+rules `153`, `152`, and `151`, and a hard-refreshed exact `NLS-GW` search returned
+**0 items** / **No data available**. Exact MDE API reads confirmed that all three
+historical custom alerts and incident `628` remained retained evidence. The
+fallback application, service principal, OIDC credential, Graph grant, and
+GitHub environment variables were removed only after fallback-rule read-back.
 
 The protected three-file canary evidence branch remains. This cleanup does not
 change any evidence level or attribute alerts to the Graph or native paths.
