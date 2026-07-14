@@ -9,7 +9,7 @@ This file separates observed evidence from planned or synthetic validation.
 > one-row results (NLS-GW-005 retained `CandyFileCount=7`). The LIVE-001
 > alert remains evidence for the then-checked-in query revision used by portal
 > rule 152; no new alert is attributed to the hardened revision. This remediation
-> was not applied to the six live Graph-fallback objects, so their retained
+> was not applied to the six then-live Graph-fallback objects, so their retained
 > deployment read-back remains evidence for the validation revision.
 
 > **Public-release workflow posture:** The original connection-generated native
@@ -20,6 +20,12 @@ This file separates observed evidence from planned or synthetic validation.
 > manual Graph fallback is the only active custom-detection writer. A native
 > retest requires a new Repository connection to generate fresh files for the
 > new environment.
+
+> **Post-retirement workflow posture:** On July 14, the original validation
+> tenant's fallback app, service principal, federated credential, Graph grant,
+> and GitHub environment variables were removed. The checked-in fallback
+> workflow remains reviewable reference code, but no longer has authorization
+> to that tenant.
 
 > **Publication posture:** The companion
 > [case study](https://nineliveszerotrust.com/blog/gigawiper-detections-as-code/)
@@ -47,7 +53,10 @@ This file separates observed evidence from planned or synthetic validation.
 | Deployment-path sequencing | GitHub Actions run order and completion timestamps | Passed: canary run `29180371449` completed, native retry `29180501340` then completed in `Failed`, and full-pack run `29180593038` began afterward; native and fallback paths were never concurrent | 2026-07-12 |
 | Post-audit writer serialization | Local workflow contracts plus PR validation run `29275395872` at commit `0326383` | Passed at the published PR head: both deployment workflows are manual and confirmation-gated, share the exact `nls-gigawiper-custom-detection-writer` concurrency group with `cancel-in-progress: false`, and therefore cannot execute their writer jobs concurrently | 2026-07-13 |
 | Public-release active-writer posture | Repository layout plus local `Test-Lab.ps1` workflow contracts | Passed: the tenant-specific generated native files are retained outside `.github/workflows` with non-reuse notices; no active native writer remains; the manual Graph fallback is the only active custom-detection writer | 2026-07-13 |
-| Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six current rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
+| Graph-fallback rule retirement | Exact-ID retirement workflow runs `29368829996` and `29368996155` | Scoped result passed: the initial run preflighted all six fallback identities and received `204` for each exact delete; the follow-up run independently returned `404` for all six exact IDs. Both overall workflows failed closed because LIVE-rule GET results persisted. | 2026-07-14 |
+| Portal-native deletion/convergence | Exact Graph requests plus the Defender detail pages for rules `151`, `152`, and `153` | Observed: Graph returned `204`, but that response was not accepted as portal proof because the same rows remained visible. Each exact portal rule was separately submitted for deletion without touching alerts or incidents. A later Disable mutation on rule `153` returned `Client Error` / `Error enabling rules`; that error does not prove all three rules absent. Portal-list convergence remained pending at the last check; no cause is claimed. | 2026-07-14 |
+| Fallback identity retirement | Exact Entra app/service-principal audit, Azure role audit, and GitHub environment read-back | Passed after fallback-rule read-back: app and service principal absent; federated credential and `CustomDetection.ReadWrite.All` grant removed with the app; zero Azure RBAC remained; environment retained with zero variables and zero secrets | 2026-07-14 |
+| Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six validation-time rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
 | Defender portal rule-list visibility | Unified custom-detection page searched by exact `NLS-GW` prefix before and after the separate portal-native validation rules were created | Observed, cause pending: the historical pre-portal check returned **0 items** / **No data available**; the follow-up filter returned exactly three rows, all of them `NLS-GW-LIVE-001`, `NLS-GW-LIVE-003`, and `NLS-GW-LIVE-004`. None of the six Graph-fallback objects appeared, and no cause is claimed. | 2026-07-12 |
 | Disposable endpoint onboarded | MDE extension, guest verification, machine API, and `DeviceInfo` | Passed: endpoint `Onboarded` and `Active`, SENSE running, default inbound deny with no custom inbound NSG rules | 2026-07-11 |
 | Safe endpoint jobs executed | Azure managed Run Command instance views | Passed: task/registry, custom-log clear, filename-only `mc.exe`, and eight decoy renames all exited 0 | 2026-07-11 |
@@ -138,8 +147,9 @@ permission `CustomDetection.ReadWrite.All` through environment-scoped GitHub
 OIDC and had zero Azure RBAC assignments. Because the Repository path failed,
 it does not own these Graph-created or Graph-updated rules.
 
-Read-only inspection workflow run `29193356536` later retrieved all six current
-Graph objects without changing them. Post-telemetry recheck run `29193929962`
+Read-only inspection workflow run `29193356536` later retrieved all six
+validation-time Graph objects without changing them. Post-telemetry recheck run
+`29193929962`
 showed the five enabled behavior rules at frequency `PT1H`, with
 `lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime`
 `2026-07-12T14:09:25.6533333Z`; the disabled canary remained disabled. The
@@ -245,10 +255,21 @@ capture. Generated PR #6 was closed, only its generated side branch was deleted,
 and the two stale generated workflow registrations were disabled after their
 exact bot commits were recorded in the local native-retest support package.
 
-The six Graph-fallback objects, the three portal-native LIVE rules and their
-recorded alerts, the constrained fallback application, and the protected
-three-file canary evidence branch remain retained. This cleanup does not change
-their evidence level or attribute alerts to the Graph or native paths.
+Later on July 14, the six Graph-fallback objects were deleted by exact ID and
+independently returned `404`. The three portal-native rules were separately
+submitted for deletion through their exact Defender detail pages. Their recorded
+alerts and incident `628` remain retained evidence. The fallback application,
+service principal, OIDC credential, Graph grant, and GitHub environment
+variables were removed only after fallback-rule read-back. Defender still
+rendered the same LIVE-rule rows during the immediate post-delete check, but a
+subsequent Disable mutation on rule `153` returned `Client Error` / `Error
+enabling rules`; that error is not generalized into proof that all three rules
+are absent. Portal-list convergence is recorded as pending rather than inferred.
+
+The protected three-file canary evidence branch remains. This cleanup does not
+change any evidence level or attribute alerts to the Graph or native paths.
+The one-time `Retire` workflow input and retirement script were removed after
+use; the reusable fallback workflow again exposes only `Inspect` and `Apply`.
 
 ## Evidence levels
 
