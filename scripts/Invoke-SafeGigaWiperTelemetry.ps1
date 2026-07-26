@@ -26,6 +26,7 @@ $taskName = 'OneDrive Update'
 $taskAction = 'cmd.exe /c rem NLS-GigaWiper-SafeTelemetry'
 $eventLogName = 'NLS-GigaWiper-Lab'
 $eventSource = 'NLS-GigaWiper-SafeTelemetry'
+$eventLogRegistryPath = "Registry::HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\EventLog\$eventLogName"
 
 function Assert-NativeCommandSucceeded {
     param(
@@ -54,6 +55,22 @@ function Get-RegistryMarkerValue {
     }
     catch [System.Management.Automation.ItemNotFoundException] {
         return $null
+    }
+}
+
+function Get-CustomEventLogSources {
+    if (-not (Test-Path -LiteralPath $eventLogRegistryPath -PathType Container)) {
+        return @()
+    }
+
+    try {
+        return @(
+            Get-ChildItem -LiteralPath $eventLogRegistryPath -ErrorAction Stop |
+                ForEach-Object { [string]$_.PSChildName }
+        )
+    }
+    catch {
+        throw "Custom event-log source inventory could not be read for '$eventLogName'. Refusing cleanup."
     }
 }
 
@@ -101,8 +118,17 @@ function Test-LabTaskOwned {
         return $false
     }
 
-    $commandNode = $TaskXml.SelectSingleNode("/*[local-name()='Task']/*[local-name()='Actions']/*[local-name()='Exec']/*[local-name()='Command']")
-    $argumentsNode = $TaskXml.SelectSingleNode("/*[local-name()='Task']/*[local-name()='Actions']/*[local-name()='Exec']/*[local-name()='Arguments']")
+    $actionNodes = @($TaskXml.SelectNodes("/*[local-name()='Task']/*[local-name()='Actions']/*"))
+    $execNodes = @($TaskXml.SelectNodes("/*[local-name()='Task']/*[local-name()='Actions']/*[local-name()='Exec']"))
+    if ($actionNodes.Count -ne 1 -or $execNodes.Count -ne 1) {
+        return $false
+    }
+
+    $commandNode = $execNodes[0].SelectSingleNode("*[local-name()='Command']")
+    $argumentsNode = $execNodes[0].SelectSingleNode("*[local-name()='Arguments']")
+    if ($null -eq $commandNode -or $null -eq $argumentsNode) {
+        return $false
+    }
     $command = ([string]$commandNode.InnerText).Trim()
     $arguments = ([string]$argumentsNode.InnerText).Trim()
     if ($command -notmatch '(?i)(^|\\)cmd\.exe$') {
@@ -118,6 +144,26 @@ function Test-LabTaskOwned {
     return ($arguments -ceq '/c exit 0' -and $LegacyRegistryMarkerPresent)
 }
 
+function Test-LabDirectoryItemAllowed {
+    param(
+        [Parameter(Mandatory)]
+        [object]$Item,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('LabRoot', 'DecoyRoot')]
+        [string]$Kind
+    )
+
+    if ($Item.PSIsContainer) {
+        return $false
+    }
+    if ($Kind -eq 'LabRoot') {
+        return $Item.Name -in @($ownershipMarkerName, 'mc.exe')
+    }
+    return $Item.Name -eq $ownershipMarkerName -or
+        $Item.Name -match '^(?i:(?:decoy|public)-\d{2}\.(?:tmp|candy))$'
+}
+
 function Test-DirectoryContentsAreLabOnly {
     param(
         [Parameter(Mandatory)]
@@ -130,18 +176,7 @@ function Test-DirectoryContentsAreLabOnly {
 
     $items = @(Get-ChildItem -LiteralPath $Path -Force -Recurse)
     foreach ($item in $items) {
-        if ($item.PSIsContainer) {
-            return $false
-        }
-
-        $allowed = if ($Kind -eq 'LabRoot') {
-            $item.Name -in @($ownershipMarkerName, 'mc.exe')
-        }
-        else {
-            $item.Name -eq $ownershipMarkerName -or
-                $item.Name -match '^(?i:(?:decoy|public)-\d{2}\.(?:tmp|candy))$'
-        }
-        if (-not $allowed) {
+        if (-not (Test-LabDirectoryItemAllowed -Item $item -Kind $Kind)) {
             return $false
         }
     }
@@ -182,6 +217,58 @@ function Test-DirectoryOwned {
         (Test-DirectoryContentsAreLabOnly -Path $Path -Kind $Kind))
 }
 
+function Remove-OwnedDirectory {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('LabRoot', 'DecoyRoot')]
+        [string]$Kind,
+
+        [Parameter(Mandatory)]
+        [bool]$LegacyRegistryMarkerPresent
+    )
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+        return
+    }
+    if (-not (Test-DirectoryOwned `
+        -Path $Path `
+        -Kind $Kind `
+        -LegacyRegistryMarkerPresent $LegacyRegistryMarkerPresent)) {
+        throw "Reserved path '$Path' changed after preflight. Refusing cleanup."
+    }
+
+    # Remove only the allowlisted leaf files, then remove the now-empty folder
+    # without -Recurse. A newly introduced file therefore makes cleanup fail
+    # closed instead of being swept into a recursive deletion.
+    $markerPath = Join-Path $Path $ownershipMarkerName
+    $items = @(Get-ChildItem -LiteralPath $Path -Force)
+    foreach ($item in $items) {
+        if (-not (Test-LabDirectoryItemAllowed -Item $item -Kind $Kind)) {
+            throw "Reserved path '$Path' gained an unrecognized item after preflight. Refusing cleanup."
+        }
+    }
+    foreach ($item in @($items | Where-Object Name -CNE $ownershipMarkerName)) {
+        Remove-Item -LiteralPath $item.FullName -Force
+    }
+    if (Test-Path -LiteralPath $markerPath -PathType Leaf) {
+        Remove-Item -LiteralPath $markerPath -Force
+    }
+    try {
+        Remove-Item -LiteralPath $Path -ErrorAction Stop
+    }
+    catch {
+        # Keep a recoverable ownership marker if a concurrent write prevented
+        # the non-recursive directory removal.
+        if (Test-Path -LiteralPath $Path -PathType Container) {
+            Set-Content -LiteralPath $markerPath -Value $ownershipMarkerValue -NoNewline
+        }
+        throw "Reserved path '$Path' was not empty at deletion time. Its ownership marker was restored; refusing recursive cleanup."
+    }
+}
+
 function Assert-GenerationNamesAvailable {
     foreach ($path in @($labRoot, $decoyRoot)) {
         if (Test-Path -LiteralPath $path) {
@@ -206,6 +293,10 @@ function Assert-GenerationNamesAvailable {
 }
 
 function Remove-LabArtifacts {
+    param(
+        [switch]$Preview
+    )
+
     # Phase 1: validate ownership of every artifact before deleting anything.
     $registryMarker = Get-RegistryMarkerValue
     if ($null -ne $registryMarker -and $registryMarker -cne $registryValueData) {
@@ -233,6 +324,12 @@ function Remove-LabArtifacts {
     elseif ($logExists) {
         throw "Event log '$eventLogName' exists without the expected lab source. Refusing cleanup."
     }
+    if ($logExists) {
+        $eventSources = @(Get-CustomEventLogSources)
+        if ($eventSources.Count -ne 1 -or $eventSources[0] -cne $eventSource) {
+            throw "Event log '$eventLogName' has an unexpected source inventory. Refusing cleanup."
+        }
+    }
 
     $directories = @(
         @{ Path = $labRoot; Kind = 'LabRoot' },
@@ -249,22 +346,48 @@ function Remove-LabArtifacts {
         }
     }
 
+    if ($Preview) {
+        return
+    }
+
     # Phase 2: all ownership checks passed; remove only the validated artifacts.
     if ($null -ne $taskXml) {
-        & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
-        Assert-NativeCommandSucceeded -Operation "Deleting scheduled task '$taskName'"
+        $currentTaskXml = Get-LabTaskXml
+        if ($null -ne $currentTaskXml) {
+            if (-not (Test-LabTaskOwned `
+                -TaskXml $currentTaskXml `
+                -LegacyRegistryMarkerPresent $registryMarkerOwned)) {
+                throw "Scheduled task '$taskName' changed after preflight. Refusing cleanup."
+            }
+            & schtasks.exe /Delete /TN $taskName /F 2>$null | Out-Null
+            Assert-NativeCommandSucceeded -Operation "Deleting scheduled task '$taskName'"
+        }
     }
     if ($sourceExists) {
+        $currentSourceExists = [System.Diagnostics.EventLog]::SourceExists($eventSource)
+        $currentLogExists = [System.Diagnostics.EventLog]::Exists($eventLogName)
+        $currentEventSources = if ($currentLogExists) { @(Get-CustomEventLogSources) } else { @() }
+        if (-not $currentSourceExists -or -not $currentLogExists -or
+            [System.Diagnostics.EventLog]::LogNameFromSourceName($eventSource, '.') -cne $eventLogName -or
+            $currentEventSources.Count -ne 1 -or $currentEventSources[0] -cne $eventSource) {
+            throw "Event log '$eventLogName' changed after preflight. Refusing cleanup."
+        }
         Remove-EventLog -LogName $eventLogName
     }
     foreach ($directory in $directories) {
-        if (Test-Path -LiteralPath $directory.Path) {
-            Remove-Item -LiteralPath $directory.Path -Recurse -Force
-        }
+        Remove-OwnedDirectory `
+            -Path $directory.Path `
+            -Kind $directory.Kind `
+            -LegacyRegistryMarkerPresent $registryMarkerOwned
     }
     if ($registryMarkerOwned) {
-        & reg.exe DELETE $registryNativePath /V $registryValueName /F 2>$null | Out-Null
-        Assert-NativeCommandSucceeded -Operation "Deleting registry marker '$registryValueName'"
+        if ((Get-RegistryMarkerValue) -cne $registryValueData) {
+            throw "Registry marker '$registryValueName' changed after preflight. Refusing cleanup."
+        }
+        Remove-ItemProperty `
+            -LiteralPath $registryPowerShellPath `
+            -Name $registryValueName `
+            -ErrorAction Stop
     }
 }
 
@@ -275,35 +398,66 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 if ($CleanupOnly) {
-    if ($PSCmdlet.ShouldProcess('exact owned NLS GigaWiper lab artifacts', 'Remove')) {
+    $cleanupCompleted = $false
+    if ($WhatIfPreference) {
+        Remove-LabArtifacts -Preview
+        $null = $PSCmdlet.ShouldProcess('exact owned NLS GigaWiper lab artifacts', 'Remove')
+    }
+    elseif ($PSCmdlet.ShouldProcess('exact owned NLS GigaWiper lab artifacts', 'Remove')) {
         Remove-LabArtifacts
+        $cleanupCompleted = $true
     }
     [pscustomobject]@{
         Safe = $true
-        Operation = if ($WhatIfPreference) { 'cleanup-what-if' } else { 'cleanup' }
+        Operation = if ($WhatIfPreference) {
+            'cleanup-what-if'
+        }
+        elseif ($cleanupCompleted) {
+            'cleanup'
+        }
+        else {
+            'cleanup-declined'
+        }
         LabRoot = $labRoot
-        Completed = (Get-Date).ToUniversalTime()
+        Completed = if ($cleanupCompleted) { (Get-Date).ToUniversalTime() } else { $null }
     }
     return
 }
 
+# WhatIf still performs every read-only collision check and reports unsafe
+# same-name artifacts instead of claiming a safe preview.
+Assert-GenerationNamesAvailable
+$generationCompleted = $false
 if ($PSCmdlet.ShouldProcess($labRoot, 'Generate bounded benign telemetry')) {
-    # Complete every collision check before the first write so a failed
-    # preflight cannot leave a partial telemetry run behind.
-    Assert-GenerationNamesAvailable
-
     New-Item -ItemType Directory -Path $labRoot | Out-Null
-    New-Item -ItemType Directory -Path $decoyRoot | Out-Null
     Set-Content -LiteralPath (Join-Path $labRoot $ownershipMarkerName) -Value $ownershipMarkerValue -NoNewline
+    New-Item -ItemType Directory -Path $decoyRoot | Out-Null
     Set-Content -LiteralPath (Join-Path $decoyRoot $ownershipMarkerName) -Value $ownershipMarkerValue -NoNewline
 
-    & reg.exe ADD $registryNativePath /V $registryValueName /T REG_SZ /D $registryValueData /F | Out-Null
-    Assert-NativeCommandSucceeded -Operation "Creating registry marker '$registryValueName'"
+    if (-not (Test-Path -LiteralPath $registryPowerShellPath -PathType Container)) {
+        $null = New-Item -Path $registryPowerShellPath -Force
+    }
+    if ($null -ne (Get-RegistryMarkerValue)) {
+        throw "Registry marker '$registryValueName' appeared after preflight. Refusing overwrite."
+    }
+    New-ItemProperty `
+        -LiteralPath $registryPowerShellPath `
+        -Name $registryValueName `
+        -Value $registryValueData `
+        -PropertyType String `
+        -ErrorAction Stop | Out-Null
 
     $startTime = (Get-Date).AddMinutes(10).ToString('HH:mm')
+    if ($null -ne (Get-LabTaskXml)) {
+        throw "Scheduled task '$taskName' appeared after preflight. Refusing overwrite."
+    }
     & schtasks.exe /Create /TN $taskName /TR $taskAction /SC ONCE /ST $startTime /RU SYSTEM | Out-Null
     Assert-NativeCommandSucceeded -Operation "Creating scheduled task '$taskName'"
 
+    if ([System.Diagnostics.EventLog]::SourceExists($eventSource) -or
+        [System.Diagnostics.EventLog]::Exists($eventLogName)) {
+        throw "Event log '$eventLogName' or source '$eventSource' appeared after preflight. Refusing reuse."
+    }
     New-EventLog -LogName $eventLogName -Source $eventSource
     Write-EventLog -LogName $eventLogName -Source $eventSource -EventId 1001 -EntryType Information -Message 'Nine Lives safe telemetry marker. This custom lab log will be cleared.'
     & wevtutil.exe cl $eventLogName
@@ -322,11 +476,20 @@ if ($PSCmdlet.ShouldProcess($labRoot, 'Generate bounded benign telemetry')) {
         Move-Item -LiteralPath $source -Destination (Join-Path $decoyRoot $target)
         Start-Sleep -Milliseconds 500
     }
+    $generationCompleted = $true
 }
 
 [pscustomobject]@{
     Safe = $true
-    Operation = if ($WhatIfPreference) { 'generate-what-if' } else { 'generate' }
+    Operation = if ($WhatIfPreference) {
+        'generate-what-if'
+    }
+    elseif ($generationCompleted) {
+        'generate'
+    }
+    else {
+        'generate-declined'
+    }
     ScheduledTask = $taskName
     RegistryPath = $registryNativePath
     RegistryValue = $registryValueName
@@ -335,5 +498,5 @@ if ($PSCmdlet.ShouldProcess($labRoot, 'Generate bounded benign telemetry')) {
     RealEncryption = $false
     BootOrRecoveryChanges = $false
     NetworkTransfer = $false
-    Completed = (Get-Date).ToUniversalTime()
+    Completed = if ($generationCompleted) { (Get-Date).ToUniversalTime() } else { $null }
 }

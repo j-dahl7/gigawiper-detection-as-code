@@ -47,10 +47,9 @@ concurrency:
 jobs:
   deploy:
     if: >-
-      ${{ (inputs.operation == 'Inspect' && inputs.confirmation == 'INSPECT_PREVIEW_FALLBACK') ||
-          (github.ref == 'refs/heads/main' &&
-           inputs.operation == 'Apply' &&
-           inputs.confirmation == 'DEPLOY_PREVIEW_FALLBACK') }}
+      ${{ github.ref == 'refs/heads/main' &&
+          ((inputs.operation == 'Inspect' && inputs.confirmation == 'INSPECT_PREVIEW_FALLBACK') ||
+           (inputs.operation == 'Apply' && inputs.confirmation == 'DEPLOY_PREVIEW_FALLBACK')) }}
     runs-on: windows-latest
     environment: custom-detection-fallback
     steps:

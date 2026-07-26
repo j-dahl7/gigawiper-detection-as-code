@@ -3,6 +3,7 @@ extension MicrosoftSecurity
 resource detectionRule 'Microsoft.Security/detectionRules@2026-06-01-preview' = {
   id: 'nls-gw-004-minio-transfer-staging'
   displayName: 'NLS-GW-004 - Unusual MinIO Client Transfer Staging'
+  description: 'nlzt-owner:gigawiper-detection-as-code:v1'
   status: 'enabled'
   queryCondition: {
     queryText: '''

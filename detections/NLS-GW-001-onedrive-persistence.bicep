@@ -3,6 +3,7 @@ extension MicrosoftSecurity
 resource detectionRule 'Microsoft.Security/detectionRules@2026-06-01-preview' = {
   id: 'nls-gw-001-onedrive-persistence'
   displayName: 'NLS-GW-001 - OneDrive-Lookalike Task and Registry Persistence'
+  description: 'nlzt-owner:gigawiper-detection-as-code:v1'
   status: 'enabled'
   queryCondition: {
     queryText: '''

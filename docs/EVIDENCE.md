@@ -2,6 +2,13 @@
 
 This file separates observed evidence from planned or synthetic validation.
 
+> **Current source-audit boundary (July 25, 2026):** the present repository
+> passed its offline `Test-Lab.ps1 -Json` suite. A separate new read-only
+> Advanced Hunting attempt returned `Account mode is inactive` before executing
+> the synthetic query. It therefore produced no fresh live result. All live
+> deployment, telemetry, scheduler, alert, and retirement evidence below remains
+> tied to its stated July 11–14 date.
+
 > **Post-audit hardening:** NLS-GW-001 now deduplicates only after a valid
 > process/registry time correlation, and NLS-GW-005 now evaluates an optimized
 > five-minute time-key window join. Both current queries were re-run read-only
@@ -35,6 +42,8 @@ This file separates observed evidence from planned or synthetic validation.
 
 | Claim | Evidence | Status | Date |
 |---|---|---|---|
+| Current repository source audit | Local `./scripts/Test-Lab.ps1 -Json` against the current tree | Passed offline: six compiled marker-owned rules and unique IDs; ten exact-query fixture contracts; pinned endpoint image, Az modules, and manifest lifecycle controls; non-mutating direct validation; Graph collision/action guards; safe telemetry ownership and cleanup controls; pinned Linux CI runner, actions, and Bicep CLI | 2026-07-25 |
+| Fresh live synthetic API refresh | `./scripts/Invoke-SyntheticKqlTests.ps1` using the active read-only API path | Not executed by Defender: the API returned `Account mode is inactive` before query execution. This is not recorded as a new pass or as a KQL failure; the July 12 live synthetic result remains the latest completed run. | 2026-07-25 |
 | Six templates compile with Bicep | Local `az bicep build --stdout` | Passed | 2026-07-11 |
 | Pull-request validation | GitHub Actions draft PR #1 | Passed: six detections, endpoint Bicep, stable IDs, five fixtures, and nine safety boundaries | 2026-07-11 |
 | Live provider validation rejected a GUID-form ID beginning with a digit | Live direct-Bicep canary deployment returned `Invalid rule identifier` | Observed | 2026-07-11 |

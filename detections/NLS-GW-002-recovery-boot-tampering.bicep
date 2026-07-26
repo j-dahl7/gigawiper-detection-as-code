@@ -3,6 +3,7 @@ extension MicrosoftSecurity
 resource detectionRule 'Microsoft.Security/detectionRules@2026-06-01-preview' = {
   id: 'nls-gw-002-recovery-boot-tampering'
   displayName: 'NLS-GW-002 - Recovery and Boot Tampering'
+  description: 'nlzt-owner:gigawiper-detection-as-code:v1'
   status: 'enabled'
   queryCondition: {
     queryText: '''

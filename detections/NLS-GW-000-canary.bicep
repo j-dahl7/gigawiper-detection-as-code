@@ -5,6 +5,7 @@ extension MicrosoftSecurity
 resource detectionRule 'Microsoft.Security/detectionRules@2026-06-01-preview' = {
   id: 'nls-gw-000-canary'
   displayName: 'NLS-GW-000 - Detection as Code Canary'
+  description: 'nlzt-owner:gigawiper-detection-as-code:v1'
   status: 'disabled'
   queryCondition: {
     queryText: '''

@@ -1,13 +1,10 @@
-[CmdletBinding(SupportsShouldProcess)]
+[CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [ValidateNotNullOrEmpty()]
     [string]$ResourceGroup,
 
-    [switch]$IncludeCanary,
-
-    [ValidateSet('Validate', 'Deploy')]
-    [string]$Mode = 'Deploy'
+    [switch]$IncludeCanary
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,28 +19,35 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
     throw 'Azure CLI is required.'
 }
 
+# This helper is intentionally validation-only. A raw ARM deployment cannot
+# prove ownership of an existing tenant-scoped stable detection ID. Use the
+# Graph fallback for marker-verified exact-ID mutation, or a freshly generated
+# and separately reviewed Sentinel Repository workflow.
 & (Join-Path $PSScriptRoot 'Test-Lab.ps1')
 New-Item -ItemType Directory -Path $buildPath -Force | Out-Null
 
 $results = foreach ($file in $files) {
     $jsonPath = Join-Path $buildPath ($file.BaseName + '.json')
     & az bicep build --file $file.FullName --outfile $jsonPath --only-show-errors
-    if ($LASTEXITCODE -ne 0) { throw "Failed to build $($file.Name)." }
-
-    if ($Mode -eq 'Validate') {
-        & az deployment group validate --resource-group $ResourceGroup --template-file $jsonPath --only-show-errors --output none
-        if ($LASTEXITCODE -ne 0) { throw "Azure validation failed for $($file.Name)." }
-        [pscustomobject]@{ Rule=$file.BaseName; Operation='validate'; State='Succeeded' }
-        continue
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to build $($file.Name)."
     }
 
-    $deploymentName = ($file.BaseName.ToLowerInvariant() -replace '[^a-z0-9-]', '-').Trim('-')
-    if ($PSCmdlet.ShouldProcess("resource group $ResourceGroup", "Deploy $($file.Name)")) {
-        $output = & az deployment group create --resource-group $ResourceGroup --template-file $jsonPath --name $deploymentName --only-show-errors --query '{state:properties.provisioningState,timestamp:properties.timestamp}' -o json
-        if ($LASTEXITCODE -ne 0) { throw "Deployment failed for $($file.Name)." }
-        $parsed = $output | ConvertFrom-Json
-        [pscustomobject]@{ Rule=$file.BaseName; Operation='deploy'; State=$parsed.state; Timestamp=$parsed.timestamp }
+    & az deployment group validate `
+        --resource-group $ResourceGroup `
+        --template-file $jsonPath `
+        --only-show-errors `
+        --output none
+    if ($LASTEXITCODE -ne 0) {
+        throw "Azure validation failed for $($file.Name)."
+    }
+
+    [pscustomobject]@{
+        Rule = $file.BaseName
+        Operation = 'validate-only'
+        State = 'Succeeded'
     }
 }
 
 $results | Format-Table -AutoSize
+Write-Host 'Validation completed. No custom-detection object was created or updated.'
