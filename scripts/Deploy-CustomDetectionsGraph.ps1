@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $graphBaseUri = 'https://graph.microsoft.com/beta/security/rules/detectionRules'
+$ownershipMarker = 'nlzt-owner:gigawiper-detection-as-code:v1'
 $allowedRootProperties = @(
     'id',
     'displayName',
@@ -187,13 +188,33 @@ function Get-DetectionResponseActionCount {
         return 0
     }
 
-    $count = if ($null -eq $DetectionAction.responseActions) {
-        0
-    } else {
-        @($DetectionAction.responseActions).Count
+    $responseActions = if ($DetectionAction -is [System.Collections.IDictionary]) {
+        if ($DetectionAction.Contains('responseActions')) { $DetectionAction['responseActions'] } else { $null }
     }
-    if ($DetectionAction.automatedActions) {
-        foreach ($property in $DetectionAction.automatedActions.PSObject.Properties) {
+    else {
+        $DetectionAction.responseActions
+    }
+    $count = if ($null -eq $responseActions) { 0 } else { @($responseActions).Count }
+
+    $automatedActions = if ($DetectionAction -is [System.Collections.IDictionary]) {
+        if ($DetectionAction.Contains('automatedActions')) { $DetectionAction['automatedActions'] } else { $null }
+    }
+    else {
+        $DetectionAction.automatedActions
+    }
+    if ($null -ne $automatedActions) {
+        $actionProperties = if ($automatedActions -is [System.Collections.IDictionary]) {
+            @($automatedActions.Keys | ForEach-Object {
+                [pscustomobject]@{ Name = [string]$_; Value = $automatedActions[$_] }
+            })
+        }
+        elseif ($automatedActions -is [pscustomobject]) {
+            @($automatedActions.PSObject.Properties)
+        }
+        else {
+            throw 'Microsoft Graph returned an unsupported automatedActions shape.'
+        }
+        foreach ($property in $actionProperties) {
             if ($property.Name -notlike '@*' -and $null -ne $property.Value) {
                 $count += @($property.Value).Count
             }
@@ -202,7 +223,22 @@ function Get-DetectionResponseActionCount {
     return $count
 }
 
-function Assert-ExistingDetectionIsAlertOnly {
+function Assert-DesiredDetectionIsOwnedAndAlertOnly {
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Rule
+    )
+
+    if ([string]$Rule.description -cne $ownershipMarker) {
+        throw "Desired rule '$($Rule.id)' is missing the exact ownership marker."
+    }
+    $responseActionCount = Get-DetectionResponseActionCount -DetectionAction $Rule.detectionAction
+    if ($responseActionCount -gt 0) {
+        throw "Desired rule '$($Rule.id)' contains $responseActionCount response action(s). Refusing any tenant mutation."
+    }
+}
+
+function Assert-DetectionHasOwnershipMarker {
     param(
         [Parameter(Mandatory)]
         [string]$RuleId,
@@ -211,6 +247,27 @@ function Assert-ExistingDetectionIsAlertOnly {
         [object]$Rule
     )
 
+    if ([string]$Rule.description -cne $ownershipMarker) {
+        throw "Exact-ID collision for '$RuleId': the existing rule does not carry this lab's ownership marker."
+    }
+}
+
+function Assert-ExistingDetectionIsOwnedAndAlertOnly {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RuleId,
+
+        [Parameter(Mandatory)]
+        [object]$Rule,
+
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Expected
+    )
+
+    if ([string]$Expected.description -cne $ownershipMarker) {
+        throw "Desired rule '$RuleId' is missing the exact ownership marker. Refusing any tenant mutation."
+    }
+    Assert-DetectionHasOwnershipMarker -RuleId $RuleId -Rule $Rule
     $responseActionCount = Get-DetectionResponseActionCount -DetectionAction $Rule.detectionAction
     if ($responseActionCount -gt 0) {
         throw "Existing rule '$RuleId' has $responseActionCount response action(s). Refusing to modify an armed rule."
@@ -310,6 +367,7 @@ function Assert-DetectionMatches {
     $checks = [ordered]@{
         id = [string]$Actual.id
         displayName = [string]$Actual.displayName
+        description = [string]$Actual.description
         status = [string]$Actual.status
         queryText = & $normalizeQuery ([string]$Actual.queryCondition.queryText)
         frequency = [string]$Actual.schedule.frequency
@@ -320,6 +378,7 @@ function Assert-DetectionMatches {
     $expectedChecks = [ordered]@{
         id = [string]$Expected.id
         displayName = [string]$Expected.displayName
+        description = [string]$Expected.description
         status = [string]$Expected.status
         queryText = & $normalizeQuery ([string]$Expected.queryCondition.queryText)
         frequency = [string]$Expected.schedule.frequency
@@ -407,7 +466,7 @@ if ($Mode -eq 'Inspect') {
 
     $inspectionResults = @(
         foreach ($ruleId in $ruleIds) {
-            $ruleUri = '{0}/{1}?$select=id,status,schedule,lastRunDetails,detectionAction' -f `
+            $ruleUri = '{0}/{1}?$select=id,description,status,schedule,lastRunDetails,detectionAction' -f `
                 $graphBaseUri, [uri]::EscapeDataString($ruleId)
             $response = Invoke-DetectionGraphRequest `
                 -Method GET `
@@ -418,7 +477,7 @@ if ($Mode -eq 'Inspect') {
                 # lastRunDetails is deprecated and scheduled for removal. Keep
                 # its current evidence fields when available, but retry using
                 # only durable metadata when Graph no longer accepts it.
-                $ruleUri = '{0}/{1}?$select=id,status,schedule,detectionAction' -f `
+                $ruleUri = '{0}/{1}?$select=id,description,status,schedule,detectionAction' -f `
                     $graphBaseUri, [uri]::EscapeDataString($ruleId)
                 $response = Invoke-DetectionGraphRequest `
                     -Method GET `
@@ -429,6 +488,7 @@ if ($Mode -eq 'Inspect') {
             if ($response.StatusCode -eq 404) {
                 throw "Exact custom-detection rule '$ruleId' was not found."
             }
+            Assert-DetectionHasOwnershipMarker -RuleId $ruleId -Rule $response.Body
             New-DetectionInspection -Rule $response.Body
         }
     )
@@ -455,6 +515,32 @@ if (($compiledRules.id | Sort-Object -Unique).Count -ne $compiledRules.Count) {
     throw 'Compiled custom detection IDs are not unique.'
 }
 
+function Get-LatestOwnedAlertOnlyDetection {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RuleId,
+
+        [Parameter(Mandatory)]
+        [uri]$RuleUri,
+
+        [Parameter(Mandatory)]
+        [System.Collections.IDictionary]$Expected
+    )
+
+    $latest = Invoke-DetectionGraphRequest -Method GET -Uri $RuleUri -AllowedStatus @(200, 404)
+    if ($latest.StatusCode -ne 200) {
+        throw "Rule '$RuleId' disappeared immediately before update. Refusing to recreate it through PATCH."
+    }
+    Assert-ExistingDetectionIsOwnedAndAlertOnly `
+        -RuleId $RuleId `
+        -Rule $latest.Body `
+        -Expected $Expected
+    return $latest.Body
+}
+foreach ($rule in $compiledRules) {
+    Assert-DesiredDetectionIsOwnedAndAlertOnly -Rule $rule
+}
+
 if ($Mode -eq 'Plan') {
     $compiledRules |
         ForEach-Object {
@@ -478,7 +564,10 @@ $results = foreach ($rule in $compiledRules) {
     $ruleUri = '{0}/{1}' -f $graphBaseUri, [uri]::EscapeDataString([string]$rule.id)
     $existing = Invoke-DetectionGraphRequest -Method GET -Uri $ruleUri -AllowedStatus @(200, 404)
     if ($existing.StatusCode -eq 200) {
-        Assert-ExistingDetectionIsAlertOnly -RuleId $rule.id -Rule $existing.Body
+        Assert-ExistingDetectionIsOwnedAndAlertOnly `
+            -RuleId $rule.id `
+            -Rule $existing.Body `
+            -Expected $rule
     }
 
     if ($existing.StatusCode -eq 404) {
@@ -489,7 +578,10 @@ $results = foreach ($rule in $compiledRules) {
             if ($raceCheck.StatusCode -ne 200) {
                 throw "Rule '$($rule.id)' conflicted by name, title, or ID, but its stable ID is still absent. Refusing to adopt another rule."
             }
-            Assert-ExistingDetectionIsAlertOnly -RuleId $rule.id -Rule $raceCheck.Body
+            Assert-ExistingDetectionIsOwnedAndAlertOnly `
+                -RuleId $rule.id `
+                -Rule $raceCheck.Body `
+                -Expected $rule
             $updateBody = [ordered]@{}
             foreach ($key in @('displayName', 'description', 'status', 'queryCondition', 'schedule', 'detectionAction')) {
                 if ($rule.Contains($key)) {
@@ -497,6 +589,10 @@ $results = foreach ($rule in $compiledRules) {
                 }
             }
             $updateJson = $updateBody | ConvertTo-Json -Depth 100 -Compress
+            $null = Get-LatestOwnedAlertOnlyDetection `
+                -RuleId $rule.id `
+                -RuleUri $ruleUri `
+                -Expected $rule
             $write = Invoke-DetectionGraphRequest -Method PATCH -Uri $ruleUri -Body $updateJson -AllowedStatus @(200)
             $operation = 'updated-after-conflict'
         }
@@ -512,6 +608,10 @@ $results = foreach ($rule in $compiledRules) {
             }
         }
         $updateJson = $updateBody | ConvertTo-Json -Depth 100 -Compress
+        $null = Get-LatestOwnedAlertOnlyDetection `
+            -RuleId $rule.id `
+            -RuleUri $ruleUri `
+            -Expected $rule
         $write = Invoke-DetectionGraphRequest -Method PATCH -Uri $ruleUri -Body $updateJson -AllowedStatus @(200)
         $operation = 'updated'
     }

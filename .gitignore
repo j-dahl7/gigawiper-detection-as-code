@@ -1,4 +1,6 @@
 .build/
 *.local.json
+.gigawiper-endpoint.json
+.gigawiper-endpoint.json.tmp.*
 evidence/raw/
 evidence/private/

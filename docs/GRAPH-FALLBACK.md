@@ -48,7 +48,8 @@ These values, the application, and the federated credential must belong to
 your own environment. The public repository supplies no reusable tenant access,
 and the workflow cannot authenticate until you create and authorize this
 dedicated identity. `Apply` mutates tenant-scoped custom-detection objects;
-`Inspect` is limited to exact-ID reads, and local `Plan` obtains no token.
+`Inspect` is limited to exact-ID reads and refuses to attribute an unmarked
+same-ID object to this lab, and local `Plan` obtains no token.
 
 ## Run order
 
@@ -76,8 +77,14 @@ reviewed and hardened before use.
    disabled after native Repository synchronization succeeds.
 
 The script performs exact-ID GET/POST/PATCH operations only. It never deletes
-or prunes rules, and it refuses to adopt a name/title conflict when the expected
-stable ID is absent.
+or prunes rules. Before any write, every compiled desired rule must carry the
+exact root description `nlzt-owner:gigawiper-detection-as-code:v1` and have zero
+current or deprecated response actions. An existing exact ID is updated only
+when it already carries that same marker and is alert-only; otherwise the
+operation stops as a collision. It also refuses to adopt a name/title conflict
+when the expected stable ID is absent. This deliberately means an older
+unmarked deployment is not auto-adopted: reconcile or retire it through a
+separately reviewed exact-ID procedure before applying the current fallback.
 
 ## Retire the fallback
 

@@ -3,6 +3,7 @@ extension MicrosoftSecurity
 resource detectionRule 'Microsoft.Security/detectionRules@2026-06-01-preview' = {
   id: 'nls-gw-003-event-log-destruction'
   displayName: 'NLS-GW-003 - Windows Event Log Destruction'
+  description: 'nlzt-owner:gigawiper-detection-as-code:v1'
   status: 'enabled'
   queryCondition: {
     queryText: '''

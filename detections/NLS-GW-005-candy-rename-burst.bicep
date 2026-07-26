@@ -3,6 +3,7 @@ extension MicrosoftSecurity
 resource detectionRule 'Microsoft.Security/detectionRules@2026-06-01-preview' = {
   id: 'nls-gw-005-candy-rename-burst'
   displayName: 'NLS-GW-005 - Candy Extension Rename Burst'
+  description: 'nlzt-owner:gigawiper-detection-as-code:v1'
   status: 'enabled'
   queryCondition: {
     queryText: '''
