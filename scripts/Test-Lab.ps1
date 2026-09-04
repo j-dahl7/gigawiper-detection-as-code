@@ -354,21 +354,12 @@ foreach ($case in $endpointInventoryCases.GetEnumerator()) {
 }
 
 $telemetryScript = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Invoke-SafeGigaWiperTelemetry.ps1') -Raw
-$forbidden = @(
-    'Clear-EventLog -LogName Security',
-    'wevtutil cl Security',
-    'wevtutil cl System',
-    'wevtutil cl Application',
-    'reagentc /disable',
-    'bcdedit /set recoveryenabled no',
-    'Remove-Item C:\\Windows\\System32',
-    'Format-Volume',
-    'Clear-Disk'
-)
-foreach ($value in $forbidden) {
-    if ($telemetryScript.Contains($value, [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Forbidden destructive string found in safe telemetry script: $value"
-    }
+. (Join-Path $PSScriptRoot 'Test-TelemetrySafety.ps1')
+$telemetrySafetyCases = Test-TelemetrySafetyFixtures -FixturePath (Join-Path $root 'tests/telemetry-safety-cases.json')
+$unsafeCommands = @(Get-TelemetrySafetyFindings -Source $telemetryScript)
+if ($unsafeCommands.Count) {
+    $locations = $unsafeCommands | ForEach-Object { "line $($_.Line): $($_.Command) ($($_.Reason))" }
+    throw "Unreviewed destructive command in telemetry script: $($locations -join '; ')"
 }
 
 $cleanupStart = $telemetryScript.IndexOf('function Remove-LabArtifacts', [StringComparison]::Ordinal)
@@ -960,7 +951,7 @@ $summary = [pscustomobject]@{
     Passed = $true
     DetectionFiles = $files.Count
     UniqueIds = $ids.Count
-    SafetyChecks = $forbidden.Count
+    SafetyChecks = $telemetrySafetyCases
     TelemetryContracts = $telemetryContracts.Count
     TelemetryTaskModelCases = $taskOwnershipCases.Count
     InfrastructureCompiled = $true
@@ -986,5 +977,5 @@ if ($Json) {
     $summary | ConvertTo-Json -Depth 5
 } else {
     $results | Format-Table -AutoSize
-    Write-Host "Validated $($files.Count) detection templates, the zero-inbound endpoint template, $($ids.Count) unique IDs, $($expectedSyntheticTests.Count) positive/negative synthetic contracts, $($forbidden.Count) destructive-string boundaries, $($infraContracts.Count) infrastructure controls, $($directDeploymentContracts.Count) direct-deployment controls, $($endpointContracts.Count) endpoint lifecycle controls, $($telemetryContracts.Count) telemetry ownership controls, $($fallbackContracts.Count) fallback controls, and $($workflowContracts.Count) workflow controls."
+    Write-Host "Validated $($files.Count) detection templates, the zero-inbound endpoint template, $($ids.Count) unique IDs, $($expectedSyntheticTests.Count) positive/negative synthetic contracts, $telemetrySafetyCases parse-only command-safety fixtures, $($infraContracts.Count) infrastructure controls, $($directDeploymentContracts.Count) direct-deployment controls, $($endpointContracts.Count) endpoint lifecycle controls, $($telemetryContracts.Count) telemetry ownership controls, $($fallbackContracts.Count) fallback controls, and $($workflowContracts.Count) workflow controls."
 }
