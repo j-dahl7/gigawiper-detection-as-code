@@ -494,6 +494,20 @@ non-recursive directory removal, so a newly introduced file fails closed.
 
 ## Validation levels
 
+`scripts/Test-Lab.ps1` also parses the telemetry helper's PowerShell AST and
+runs `tests/telemetry-safety-cases.json` without executing any fixture command.
+The guard recognizes command names, executable suffixes, quoted/module-qualified
+paths, event-log arguments, boot-entry arguments, deletion aliases, and
+unreviewed shell/dynamic invocations. Only the exact custom lab log and the
+reviewed nonrecursive owned-directory deletion shapes are permitted.
+
+This is a bounded regression guard, not proof that arbitrary PowerShell is
+safe or free of obfuscated side effects. Existing ownership, collision,
+allowlisted-file, and cleanup checks plus review of the complete helper remain
+required. The harmless `mc.exe` path is allowed only with its exact fixed
+echo-only argument string. No fixture downloads or executes malware, clears
+an operational log, modifies boot/recovery settings, or deletes a real file.
+
 | Level | Meaning |
 |---|---|
 | Live deployment | Rule compiled, was deployed by the explicitly named path, and its exact state was read back from Defender XDR |
