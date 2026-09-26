@@ -7,14 +7,28 @@ DeviceNetworkEvents
 // Hunt 2: Rare executable-to-destination combinations on observed C2 ports.
 let Lookback = 14d;
 let Recent = 1d;
+let ObservedPorts = dynamic([5544, 7542]);
+// DeviceNetworkEvents frequently omits SHA256. Keep the algorithm in the key,
+// prefer SHA1, and use a clearly labelled path fallback when no hash exists.
+let ProcessIdentity = (sha1:string, sha256:string, folder:string, file:string) {
+    case(isnotempty(sha1), strcat("sha1:", tolower(sha1)),
+         isnotempty(sha256), strcat("sha256:", tolower(sha256)),
+         isnotempty(folder) or isnotempty(file), strcat("path:", tolower(folder), "/", tolower(file)),
+         "")
+};
 let Baseline = DeviceNetworkEvents
 | where Timestamp between (ago(Lookback) .. ago(Recent))
-| summarize BaselineConnections=count() by InitiatingProcessSHA256, RemoteIP, RemotePort;
+| where RemotePort in (ObservedPorts)
+| extend ProcessKey = ProcessIdentity(InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessFolderPath, InitiatingProcessFileName)
+| where isnotempty(ProcessKey)
+| summarize by ProcessKey, RemoteIP, RemotePort;
 DeviceNetworkEvents
 | where Timestamp > ago(Recent)
-| where RemotePort in (5544, 7542)
-| join kind=leftanti Baseline on InitiatingProcessSHA256, RemoteIP, RemotePort
-| project Timestamp, DeviceId, DeviceName, RemoteIP, RemotePort, InitiatingProcessFileName, InitiatingProcessFolderPath, InitiatingProcessCommandLine, InitiatingProcessSHA256, ReportId
+| where RemotePort in (ObservedPorts)
+| extend ProcessKey = ProcessIdentity(InitiatingProcessSHA1, InitiatingProcessSHA256, InitiatingProcessFolderPath, InitiatingProcessFileName)
+| where isnotempty(ProcessKey)
+| join kind=leftanti Baseline on ProcessKey, RemoteIP, RemotePort
+| project Timestamp, DeviceId, DeviceName, RemoteIP, RemotePort, ProcessKey, InitiatingProcessFileName, InitiatingProcessFolderPath, InitiatingProcessCommandLine, InitiatingProcessSHA1, InitiatingProcessSHA256, ReportId
 
 // Hunt 3: Direct interaction with Security.evtx.
 DeviceFileEvents

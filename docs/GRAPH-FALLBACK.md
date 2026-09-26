@@ -19,6 +19,13 @@ resource-group role. The Graph permission is tenant-wide, so compensate with a
 dedicated identity, GitHub environment controls, branch protection, CODEOWNERS,
 and manual execution.
 
+The permission can configure tenant-wide custom detections that include
+automated response actions, not just edit query text. Zero Azure RBAC and this
+repository's zero-action checks do not narrow the app's Graph authorization.
+Protect the federation, source workflow and environment as privileged assets.
+The historical validation used zero response actions; that observation is not
+a permission boundary. See the [Graph automated-action model](https://learn.microsoft.com/en-us/graph/api/resources/security-automatedactionset?view=graph-rest-beta).
+
 Create one federated identity credential on the application:
 
 | Field | Value |
