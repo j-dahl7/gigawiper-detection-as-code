@@ -13,6 +13,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
@@ -25,3 +26,14 @@ jobs:
       - name: Validate Bicep, stable IDs, and query contracts
         shell: pwsh
         run: ./scripts/Test-Lab.ps1
+
+      - name: Analyze the network hunt against the documented table schema
+        shell: pwsh
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP 'kusto-language-12.4.1'
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          $archive = Join-Path $directory 'kusto.zip'
+          Invoke-WebRequest -Uri 'https://api.nuget.org/v3-flatcontainer/microsoft.azure.kusto.language/12.4.1/microsoft.azure.kusto.language.12.4.1.nupkg' -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne '154C176AC9C1C4AE9CF0BC53B74354C9D35798FF587F81FE6E0005028A0A1961') { throw 'Kusto language package checksum mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath (Join-Path $directory 'package')
+          ./scripts/Test-NetworkHuntSyntax.ps1 -KustoAssembly (Join-Path $directory 'package/lib/net6.0/Kusto.Language.dll')

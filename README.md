@@ -10,6 +10,16 @@ the native-path result observed in this validation.
 > Windows Security/System/Application logs. Destructive stages are validated
 > with synthetic rows only.
 
+**Source maintenance, September 25, 2026:** the network hunt now identifies a
+process by SHA1, then SHA256, with an explicitly labelled normalized-path
+fallback. Microsoft documents that `InitiatingProcessSHA256` is often absent in
+`DeviceNetworkEvents`; grouping only on that field can hide a new executable
+behind another process's prior connection. Path fallback is lower-confidence
+identity, not proof of identical file bytes. Rows without any process identity
+are omitted rather than collapsed into a shared empty key. This update was
+checked offline against the table's column contract, not rerun in a tenant;
+all retained live observations below keep their original dates.
+
 For the complete live-result narrative, see the published
 [case study](https://nineliveszerotrust.com/blog/gigawiper-detections-as-code/)
 and its shorter [lab guide](https://nineliveszerotrust.com/labs/gigawiper-detection-as-code/).
