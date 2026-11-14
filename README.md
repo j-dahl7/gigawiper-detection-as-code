@@ -10,6 +10,20 @@ the native-path result observed in this validation.
 > Windows Security/System/Application logs. Destructive stages are validated
 > with synthetic rows only.
 
+**Source maintenance, November 13, 2026:** the Graph fallback's `Apply` mode
+now reads, creates, updates, and verifies rules through the generally available
+Microsoft Graph v1.0 endpoint, `/v1.0/security/rules/detectionRules`, instead
+of beta. Microsoft Graph
+[What's new](https://learn.microsoft.com/en-us/graph/whats-new-overview) lists
+v1.0 custom detection rules under **October 2026: New and generally
+available**; the Graph changelog dates the v1.0 methods October 12, 2026, and
+the v1.0 reference pages were published November 3, 2026. Read-only `Inspect`
+stays on beta because `lastRunDetails` and `schedule.nextRunDateTime` are
+published only there. This change was checked offline only, against the v1.0
+reference and with the offline suite; no v1.0 request has been sent to any
+tenant. Every Graph fallback run recorded below used the beta endpoint in July
+2026.
+
 **Source maintenance, September 25, 2026:** the network hunt now identifies a
 process by SHA1, then SHA256, with an explicitly labelled normalized-path
 fallback. Microsoft documents that `InitiatingProcessSHA256` is often absent in
@@ -32,13 +46,17 @@ Exact alert IDs, claim boundaries, and editorial provenance remain in the dated
 > historical alerts and incident were preserved. The reusable workflow remains
 > checked in without authorization to the original tenant.
 
-> **Current source-audit boundary (July 25, 2026):** the offline
-> `./scripts/Test-Lab.ps1 -Json` suite passed against the current repository.
-> A new read-only `Invoke-SyntheticKqlTests.ps1` attempt stopped before query
-> execution because Defender returned `Account mode is inactive`. No fresh live
-> rule deployment, scheduler run, endpoint telemetry run, alert, or cleanup is
-> claimed by this audit. All live outcomes below remain explicitly dated
-> historical evidence from July 11–14.
+> **Current source-audit boundary (November 13, 2026), offline checks only:**
+> the offline `./scripts/Test-Lab.ps1 -Json` suite passed against the current
+> repository with Bicep CLI `v0.45.6`. The network-hunt syntax step, which
+> needs a downloaded Kusto language package, was not run locally; CI runs it on
+> every pull request, and this change does not touch that hunt. No Microsoft
+> Graph request, rule deployment, scheduler run, endpoint telemetry run, alert,
+> or cleanup is claimed by this audit. The latest live attempt remains the
+> July 25, 2026 read-only `Invoke-SyntheticKqlTests.ps1` run, which stopped
+> before query execution because Defender returned `Account mode is inactive`.
+> All live outcomes below
+> remain explicitly dated historical evidence from July 11–14.
 
 ## What this proves
 
@@ -153,7 +171,8 @@ The capability is preview. This repository was built against:
 | Component | Version/date |
 |---|---|
 | Documentation and live validation dates | 2026-07-11 through 2026-07-12 |
-| Current source-only audit | 2026-07-25; offline suite passed, fresh Advanced Hunting attempt blocked before execution by inactive Defender account mode |
+| Current source-only audit | 2026-11-13; offline checks only, offline suite passed; the latest live attempt is the 2026-07-25 Advanced Hunting run, blocked before execution by inactive Defender account mode |
+| Microsoft Graph custom detections | `Apply`: source moved to v1.0 on 2026-11-13, not tenant-tested; `Inspect`: beta; July 2026 live runs: beta |
 | Resource API | `2026-06-01-preview` |
 | Microsoft Security Bicep extension | `v1.0.1` |
 | Portal | Microsoft Defender portal |
@@ -189,7 +208,11 @@ The test compiles every Bicep file and verifies:
 - the tenant-specific native files are retained outside the active workflow
   directory, no native writer remains active, and the sole active Graph writer
   remains manual, confirmation-gated, version-pinned, and refuses to update an
-  existing exact ID without the repository marker or with response actions; and
+  existing exact ID without the repository marker or with response actions;
+- the Graph fallback's own Bicep-to-Graph conversion gives every rule a create
+  body that contains only property paths documented for the Microsoft Graph
+  v1.0 Create method, beta-only or deprecated paths are rejected, `Apply` calls
+  only the v1.0 endpoint, and beta is confined to read-only `Inspect`; and
 - no destructive commands appear in the safe telemetry script.
 
 To execute all ten constructed positive/negative cases through Defender's
@@ -264,14 +287,37 @@ while the preview-path root cause remains unconfirmed.
 
 The fallback compiles the same six Bicep files, extracts only the custom-rule
 properties, and performs an exact-ID GET followed by POST or PATCH through the
-official Microsoft Graph beta custom-detection API. It then reads each stable
-ID back and verifies the desired status, schedule, KQL, alert metadata, MITRE
+generally available Microsoft Graph v1.0 custom-detection API. It then reads
+each stable ID back and verifies the desired status, schedule, KQL, alert
+metadata, MITRE
 mapping, host mapping, exact root description marker, and absence of response
 actions. Before any tenant write, every desired rule must carry
 `nlzt-owner:gigawiper-detection-as-code:v1` and contain no response actions. An
 existing exact ID is updated only if it already carries that same marker and is
 also alert-only; otherwise the script treats it as a collision and stops. Older
 unmarked deployments are intentionally not auto-adopted.
+
+### Graph endpoint versions (November 13, 2026)
+
+| Mode | Endpoint | Why |
+|---|---|---|
+| `Apply` (GET, POST, PATCH, read-back) | `https://graph.microsoft.com/v1.0/security/rules/detectionRules` | Generally available since October 2026; the v1.0 reference documents every property the fallback sends and every Update field it changes |
+| `Inspect` (exact-ID GET only) | `https://graph.microsoft.com/beta/security/rules/detectionRules` | Only beta publishes `lastRunDetails` and `schedule.nextRunDateTime`; v1.0 exposes no run-time execution details |
+
+The v1.0 write path is not tenant-tested. It was checked offline only on
+November 13, 2026: against Microsoft's v1.0 reference and by the offline suite,
+which runs the fallback's own conversion over all six rules. The July 2026
+canary, full-pack, and inspection runs below all used beta. Run `Canary` first
+on v1.0 and confirm its read-back before `All`.
+
+Microsoft documents beta as unsupported in production applications. `Inspect`
+is read-only and stays there only for those two run-time fields. Beta marks
+both deprecated with a documented removal date of October 1, 2026, and still
+listed them on November 13, 2026. If beta rejects `lastRunDetails`, `Inspect`
+retries without it; missing fields are reported as blank. The v1.0
+`detectionAction` resource carries `automatedActions` but not the deprecated
+`responseActions` collection, which beta documents as replaced by
+`automatedActions`; the fallback counts both models wherever they appear.
 
 This is the repository's only active custom-detection writer. Public reuse
 requires your own dedicated single-tenant Entra application, federated GitHub
@@ -286,9 +332,10 @@ exact `DEPLOY_PREVIEW_FALLBACK` confirmation.
 without the repository marker is rejected rather than reported as this lab's
 rule.
 
-Live validation completed in two manual runs: canary run `29180371449` passed,
-then full-pack run `29180593038` updated and read back all six exact IDs. The
-canary was disabled, the five behavior rules were enabled, and all six rules
+Live validation completed in two manual runs through the beta endpoint that
+`Apply` used in July 2026: canary run `29180371449` passed, then full-pack run
+`29180593038` updated and read back all six exact IDs. The canary was
+disabled, the five behavior rules were enabled, and all six rules
 had zero automated response actions. These are Graph-created or Graph-updated
 rules; the failed Repository connection does not own them. No custom alert is
 attributed to those Graph-fallback objects.
@@ -343,9 +390,12 @@ To apply, manually run **Deploy custom detections - preview fallback** from the
 default branch. Start with `Canary`, confirm its disabled state, and then run
 `All`. Disable this fallback when native Repository synchronization succeeds.
 
-The Graph endpoint is tenant-scoped and beta. This fallback is suitable for
-this Defender XDR `Device*`-table pack; it is not presented as a general
-replacement for workspace-scoped Sentinel content.
+The Graph custom-detection API is tenant-scoped. `Apply` uses v1.0 and
+`Inspect` uses beta, both on the global `graph.microsoft.com` service. The beta
+reference lists that API for the global service only, and the v1.0 reference
+publishes no national-cloud availability as of November 13, 2026. This
+fallback is suitable for this Defender XDR `Device*`-table pack; it is not
+presented as a general replacement for workspace-scoped Sentinel content.
 
 See [the fallback identity and environment setup](docs/GRAPH-FALLBACK.md) when
 forking the lab into another tenant.
@@ -600,9 +650,15 @@ Never use complete-mode resource-group deployment as a cleanup shortcut.
 
 - [Microsoft GigaWiper research](https://www.microsoft.com/en-us/security/blog/2026/07/09/gigawiper-anatomy-of-a-destructive-backdoor-assembled-from-multiple-malware/)
 - [Deploy custom detection rules as code](https://learn.microsoft.com/en-us/azure/sentinel/ci-cd-custom-content#deploy-custom-detection-rules-as-code-preview)
-- [Create a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-post-detectionrules?view=graph-rest-beta)
-- [Update a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-update?view=graph-rest-beta)
-- [Delete a custom detection through Microsoft Graph beta](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-delete-detectionrules?view=graph-rest-beta)
+- [What's new in Microsoft Graph: October 2026, custom detection rules in v1.0](https://learn.microsoft.com/en-us/graph/whats-new-overview)
+- [Microsoft Graph versioning and support](https://learn.microsoft.com/en-us/graph/versioning-and-support)
+- [Microsoft Graph v1.0 detectionRule resource](https://learn.microsoft.com/en-us/graph/api/resources/security-detectionrule?view=graph-rest-1.0)
+- [Create a custom detection through Microsoft Graph v1.0](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-post-detectionrules?view=graph-rest-1.0)
+- [Get a custom detection through Microsoft Graph v1.0](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-get?view=graph-rest-1.0)
+- [Update a custom detection through Microsoft Graph v1.0](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-update?view=graph-rest-1.0)
+- [Delete a custom detection through Microsoft Graph v1.0](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-delete-detectionrules?view=graph-rest-1.0)
+- [Microsoft Graph beta detectionRule resource (`lastRunDetails`, used by `Inspect`)](https://learn.microsoft.com/en-us/graph/api/resources/security-detectionrule?view=graph-rest-beta)
+- [Microsoft Graph beta ruleSchedule resource (`nextRunDateTime`, used by `Inspect`)](https://learn.microsoft.com/en-us/graph/api/resources/security-ruleschedule?view=graph-rest-beta)
 - [Primary and secondary Sentinel workspaces in the Defender portal](https://learn.microsoft.com/en-us/azure/sentinel/workspaces-defender-portal)
 - [Create custom detection rules](https://learn.microsoft.com/en-us/defender-xdr/custom-detection-rules)
 - [MITRE ATT&CK: Clear Windows Event Logs](https://attack.mitre.org/techniques/T1685/005/)

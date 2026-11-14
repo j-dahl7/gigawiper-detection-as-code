@@ -710,6 +710,171 @@ foreach ($case in $actionModelCases) {
         throw "Graph response-action regression '$($case.Name)' expected $($case.Expected), got $actualActionCount."
     }
 }
+
+# Apply sends its requests to the Microsoft Graph v1.0 endpoint. Run the
+# writer's own Bicep-to-Graph conversion and hold every create body to the
+# request shape reviewed against Microsoft's v1.0 reference on November 13,
+# 2026, so a later edit cannot send a beta-only property there unnoticed.
+# This is an offline shape check; it makes no Microsoft Graph request.
+$graphFallbackTokens = $null
+$graphFallbackParseErrors = $null
+$graphFallbackAst = [System.Management.Automation.Language.Parser]::ParseInput(
+    $graphFallback,
+    [ref]$graphFallbackTokens,
+    [ref]$graphFallbackParseErrors
+)
+if ($graphFallbackParseErrors.Count -gt 0) {
+    throw 'Unable to parse the Graph fallback for request-shape behavior tests.'
+}
+$requestConverterFunction = @(
+    $graphFallbackAst.FindAll(
+        {
+            param($Ast)
+            $Ast -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $Ast.Name -ceq 'ConvertFrom-DetectionBicep'
+        },
+        $true
+    )
+)
+$allowedRootAssignment = @(
+    $graphFallbackAst.FindAll(
+        {
+            param($Ast)
+            $Ast -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $Ast.Left.Extent.Text -ceq '$allowedRootProperties'
+        },
+        $false
+    )
+)
+if ($requestConverterFunction.Count -ne 1 -or $allowedRootAssignment.Count -ne 1) {
+    throw 'Unable to isolate the Graph request converter for request-shape behavior tests.'
+}
+Invoke-Expression $allowedRootAssignment[0].Extent.Text
+Invoke-Expression $requestConverterFunction[0].Extent.Text
+
+function Get-GraphRequestPropertyPath {
+    param(
+        [AllowNull()]
+        [object]$Node,
+
+        [string]$Prefix = ''
+    )
+
+    if ($Node -is [System.Collections.IDictionary]) {
+        if ($Node.Count -eq 0) {
+            return $Prefix
+        }
+        foreach ($key in @($Node.Keys)) {
+            $path = if ($Prefix) { "$Prefix.$key" } else { [string]$key }
+            Get-GraphRequestPropertyPath -Node $Node[$key] -Prefix $path
+        }
+        return
+    }
+    if ($Node -is [System.Collections.IEnumerable] -and $Node -isnot [string]) {
+        $items = @($Node)
+        if ($items.Count -eq 0) {
+            return $Prefix
+        }
+        foreach ($item in $items) {
+            Get-GraphRequestPropertyPath -Node $item -Prefix $Prefix
+        }
+        return
+    }
+    return $Prefix
+}
+
+$graphV1RequiredCreateProperties = @(
+    'id',
+    'displayName',
+    'status',
+    'queryCondition',
+    'schedule',
+    'detectionAction'
+)
+$graphV1RequestPaths = @(
+    '@odata.type',
+    'id',
+    'displayName',
+    'description',
+    'status',
+    'queryCondition.queryText',
+    'schedule.frequency',
+    'detectionAction.alertTemplate.title',
+    'detectionAction.alertTemplate.description',
+    'detectionAction.alertTemplate.severity',
+    'detectionAction.alertTemplate.tactics.tactic',
+    'detectionAction.alertTemplate.tactics.techniques.technique',
+    'detectionAction.alertTemplate.entityMappings.hosts.deviceIdColumn'
+)
+$requestShapeCases = [System.Collections.Generic.List[string]]::new()
+foreach ($ruleFile in $files) {
+    $createBody = ConvertFrom-DetectionBicep -File $ruleFile
+    if ([string]$createBody['@odata.type'] -cne '#microsoft.graph.security.detectionRule') {
+        throw "Graph request-shape regression: $($ruleFile.Name) does not declare the detectionRule type."
+    }
+    $missingRequiredProperties = @(
+        $graphV1RequiredCreateProperties | Where-Object { -not $createBody.Contains($_) }
+    )
+    if ($missingRequiredProperties.Count -gt 0) {
+        throw "Graph request-shape regression: $($ruleFile.Name) omits properties the v1.0 Create method requires: $($missingRequiredProperties -join ', ')."
+    }
+    $unreviewedRequestPaths = @(
+        Get-GraphRequestPropertyPath -Node $createBody |
+            Where-Object { $_ -cnotin $graphV1RequestPaths } |
+            Sort-Object -Unique -CaseSensitive
+    )
+    if ($unreviewedRequestPaths.Count -gt 0) {
+        throw "Graph request-shape regression: $($ruleFile.Name) sends properties outside the reviewed Microsoft Graph v1.0 request shape: $($unreviewedRequestPaths -join ', ')."
+    }
+    $requestShapeCases.Add($ruleFile.Name)
+}
+# Prove the shape check rejects beta-only, deprecated, and Bicep-only paths
+# instead of passing because it inspects nothing.
+$requestShapeRejectionCases = @(
+    [pscustomobject]@{
+        Name = 'deprecated beta schedule period'
+        Body = [ordered]@{ schedule = [ordered]@{ frequency = 'PT1H'; period = '1H' } }
+        Expected = 'schedule.period'
+    },
+    [pscustomobject]@{
+        Name = 'beta-only schedule lookback'
+        Body = [ordered]@{ schedule = [ordered]@{ frequency = 'PT1H'; lookback = 'PT4H' } }
+        Expected = 'schedule.lookback'
+    },
+    [pscustomobject]@{
+        Name = 'deprecated beta response actions'
+        Body = [ordered]@{
+            detectionAction = [ordered]@{
+                alertTemplate = [ordered]@{ title = 'case' }
+                responseActions = @(@{ type = 'isolate' })
+            }
+        }
+        Expected = 'detectionAction.responseActions.type'
+    },
+    [pscustomobject]@{
+        Name = 'Bicep-only nested entity-mapping id'
+        Body = [ordered]@{
+            detectionAction = [ordered]@{
+                alertTemplate = [ordered]@{
+                    entityMappings = [ordered]@{
+                        hosts = @([ordered]@{ id = 'h'; deviceIdColumn = 'DeviceId' })
+                    }
+                }
+            }
+        }
+        Expected = 'detectionAction.alertTemplate.entityMappings.hosts.id'
+    }
+)
+foreach ($case in $requestShapeRejectionCases) {
+    $rejectedPaths = @(
+        Get-GraphRequestPropertyPath -Node $case.Body |
+            Where-Object { $_ -cnotin $graphV1RequestPaths } |
+            Sort-Object -Unique -CaseSensitive
+    )
+    if (($rejectedPaths -join '|') -cne $case.Expected) {
+        throw "Graph request-shape regression '$($case.Name)' expected only $($case.Expected) to be rejected, got '$($rejectedPaths -join ', ')'."
+    }
+}
 $inspectStart = $graphFallback.IndexOf("if (`$Mode -eq 'Inspect')", [StringComparison]::Ordinal)
 $inspectEnd = if ($inspectStart -ge 0) {
     $graphFallback.IndexOf('$compiledRules =', $inspectStart, [StringComparison]::Ordinal)
@@ -796,6 +961,30 @@ $fallbackContracts = [ordered]@{
     'OIDC without subscription RBAC' = $fallbackWorkflow -match '(?m)^\s*allow-no-subscriptions:\s*true\s*$' -and $fallbackWorkflow -notmatch '(?m)^\s*subscription-id:'
     'pinned actions' = $fallbackWorkflow -match 'actions/checkout@[0-9a-f]{40}' -and $fallbackWorkflow -match 'azure/login@[0-9a-f]{40}'
     'exact-ID upsert' = $graphFallback -match 'detectionRules' -and $graphFallback -match 'EscapeDataString' -and $graphFallback -match "ValidateSet\('GET', 'POST', 'PATCH'\)"
+    'apply targets only the generally available v1.0 endpoint' =
+        $graphFallback -match ('(?m)^{0}\s*$' -f [regex]::Escape(
+            "`$graphWriteBaseUri = 'https://graph.microsoft.com/v1.0/security/rules/detectionRules'"
+        )) -and
+        ([regex]::Matches($graphFallback, [regex]::Escape('$graphWriteBaseUri'))).Count -eq 3 -and
+        ([regex]::Matches($applyBlock, [regex]::Escape('$graphWriteBaseUri'))).Count -eq 2 -and
+        "$applyBlock`n$latestGuardBlock" -notmatch [regex]::Escape('$graphInspectBaseUri') -and
+        "$applyBlock`n$latestGuardBlock" -notmatch 'graph\.microsoft\.com' -and
+        $graphFallback -notmatch '\$graphBaseUri\b'
+    'beta is confined to read-only inspection' =
+        $graphFallback -match ('(?m)^{0}\s*$' -f [regex]::Escape(
+            "`$graphInspectBaseUri = 'https://graph.microsoft.com/beta/security/rules/detectionRules'"
+        )) -and
+        ([regex]::Matches($graphFallback, [regex]::Escape('$graphInspectBaseUri'))).Count -eq 3 -and
+        ([regex]::Matches($inspectBlock, [regex]::Escape('$graphInspectBaseUri'))).Count -eq 2 -and
+        $inspectBlock -notmatch [regex]::Escape('$graphWriteBaseUri') -and
+        $inspectBlock -notmatch 'graph\.microsoft\.com' -and
+        ([regex]::Matches($graphFallback, 'graph\.microsoft\.com')).Count -eq 2
+    'update bodies carry only properties the v1.0 Update method documents' =
+        ([regex]::Matches($applyBlock, [regex]::Escape(
+            "foreach (`$key in @('displayName', 'description', 'status', 'queryCondition', 'schedule', 'detectionAction'))"
+        ))).Count -eq 2 -and
+        ([regex]::Matches($applyBlock, '(?m)^\s*\$updateBody\[\$key\] = \$rule\[\$key\]\s*$')).Count -eq 2 -and
+        ([regex]::Matches($applyBlock, '\$updateBody\[')).Count -eq 2
     'MITRE sub-technique normalization' = $graphFallback -match 'subTechniques' -and $graphFallback -match 'GetMitreFingerprints'
     'no delete or pruning' = $graphFallback -notmatch "ValidateSet\([^\r\n]*'DELETE'" -and $graphFallback -notmatch '(?i)prune'
     'app-only permission guidance' = $graphFallback -match 'CustomDetection\.ReadWrite\.All'
@@ -968,6 +1157,8 @@ $summary = [pscustomobject]@{
     CandyWindowContracts = $candyWindowContracts.Count
     LiveSyntheticRunnerPresent = $true
     GraphActionModelCases = $actionModelCases.Count
+    GraphRequestShapeCases = $requestShapeCases.Count
+    GraphRequestShapeRejectionCases = $requestShapeRejectionCases.Count
     FallbackContracts = $fallbackContracts.Count
     WorkflowContracts = $workflowContracts.Count
     Results = $results
@@ -977,5 +1168,5 @@ if ($Json) {
     $summary | ConvertTo-Json -Depth 5
 } else {
     $results | Format-Table -AutoSize
-    Write-Host "Validated $($files.Count) detection templates, the zero-inbound endpoint template, $($ids.Count) unique IDs, $($expectedSyntheticTests.Count) positive/negative synthetic contracts, $telemetrySafetyCases parse-only command-safety fixtures, $($infraContracts.Count) infrastructure controls, $($directDeploymentContracts.Count) direct-deployment controls, $($endpointContracts.Count) endpoint lifecycle controls, $($telemetryContracts.Count) telemetry ownership controls, $($fallbackContracts.Count) fallback controls, and $($workflowContracts.Count) workflow controls."
+    Write-Host "Validated $($files.Count) detection templates, the zero-inbound endpoint template, $($ids.Count) unique IDs, $($expectedSyntheticTests.Count) positive/negative synthetic contracts, $telemetrySafetyCases parse-only command-safety fixtures, $($infraContracts.Count) infrastructure controls, $($directDeploymentContracts.Count) direct-deployment controls, $($endpointContracts.Count) endpoint lifecycle controls, $($telemetryContracts.Count) telemetry ownership controls, $($requestShapeCases.Count) Graph v1.0 request shapes with $($requestShapeRejectionCases.Count) rejection cases, $($fallbackContracts.Count) fallback controls, and $($workflowContracts.Count) workflow controls."
 }

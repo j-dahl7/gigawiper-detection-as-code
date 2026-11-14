@@ -11,7 +11,25 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$graphBaseUri = 'https://graph.microsoft.com/beta/security/rules/detectionRules'
+
+# Apply reads, creates, updates, and verifies rules on the generally available
+# Microsoft Graph v1.0 endpoint. Microsoft Graph "What's new" lists v1.0
+# custom detection rules under October 2026, new and generally available; the
+# Graph changelog dates the v1.0 detectionRule methods October 12, 2026, and
+# the v1.0 reference pages were published November 3, 2026. That reference
+# documents the Get, Create, and Update calls and every property this script
+# sends. The mapping was checked against the reference and by the offline
+# suite on November 13, 2026 (offline checks only). It has not been run
+# against a tenant; the July 2026 live runs used the beta endpoint.
+$graphWriteBaseUri = 'https://graph.microsoft.com/v1.0/security/rules/detectionRules'
+
+# Inspect stays on beta for one reason: lastRunDetails and
+# schedule.nextRunDateTime are published only there. Microsoft states that
+# run-time execution details are not exposed in v1.0, and beta marks both
+# properties deprecated with a documented removal date of October 1, 2026.
+# Microsoft does not support beta in production; Inspect is read-only, never
+# writes, and tolerates both properties being absent or rejected.
+$graphInspectBaseUri = 'https://graph.microsoft.com/beta/security/rules/detectionRules'
 $ownershipMarker = 'nlzt-owner:gigawiper-detection-as-code:v1'
 $allowedRootProperties = @(
     'id',
@@ -467,7 +485,7 @@ if ($Mode -eq 'Inspect') {
     $inspectionResults = @(
         foreach ($ruleId in $ruleIds) {
             $ruleUri = '{0}/{1}?$select=id,description,status,schedule,lastRunDetails,detectionAction' -f `
-                $graphBaseUri, [uri]::EscapeDataString($ruleId)
+                $graphInspectBaseUri, [uri]::EscapeDataString($ruleId)
             $response = Invoke-DetectionGraphRequest `
                 -Method GET `
                 -Uri $ruleUri `
@@ -478,7 +496,7 @@ if ($Mode -eq 'Inspect') {
                 # its current evidence fields when available, but retry using
                 # only durable metadata when Graph no longer accepts it.
                 $ruleUri = '{0}/{1}?$select=id,description,status,schedule,detectionAction' -f `
-                    $graphBaseUri, [uri]::EscapeDataString($ruleId)
+                    $graphInspectBaseUri, [uri]::EscapeDataString($ruleId)
                 $response = Invoke-DetectionGraphRequest `
                     -Method GET `
                     -Uri $ruleUri `
@@ -561,7 +579,7 @@ if ([string]::IsNullOrWhiteSpace($env:GRAPH_ACCESS_TOKEN)) {
 }
 
 $results = foreach ($rule in $compiledRules) {
-    $ruleUri = '{0}/{1}' -f $graphBaseUri, [uri]::EscapeDataString([string]$rule.id)
+    $ruleUri = '{0}/{1}' -f $graphWriteBaseUri, [uri]::EscapeDataString([string]$rule.id)
     $existing = Invoke-DetectionGraphRequest -Method GET -Uri $ruleUri -AllowedStatus @(200, 404)
     if ($existing.StatusCode -eq 200) {
         Assert-ExistingDetectionIsOwnedAndAlertOnly `
@@ -572,7 +590,7 @@ $results = foreach ($rule in $compiledRules) {
 
     if ($existing.StatusCode -eq 404) {
         $createJson = $rule | ConvertTo-Json -Depth 100 -Compress
-        $write = Invoke-DetectionGraphRequest -Method POST -Uri $graphBaseUri -Body $createJson -AllowedStatus @(201, 409)
+        $write = Invoke-DetectionGraphRequest -Method POST -Uri $graphWriteBaseUri -Body $createJson -AllowedStatus @(201, 409)
         if ($write.StatusCode -eq 409) {
             $raceCheck = Invoke-DetectionGraphRequest -Method GET -Uri $ruleUri -AllowedStatus @(200, 404)
             if ($raceCheck.StatusCode -ne 200) {
@@ -643,4 +661,4 @@ if ($env:GITHUB_STEP_SUMMARY) {
             Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
     }
 }
-Write-Host "Applied and verified $($results.Count) custom detection rule(s) through Microsoft Graph beta."
+Write-Host "Applied and verified $($results.Count) custom detection rule(s) through Microsoft Graph v1.0."
