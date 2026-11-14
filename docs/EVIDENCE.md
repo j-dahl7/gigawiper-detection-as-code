@@ -2,12 +2,22 @@
 
 This file separates observed evidence from planned or synthetic validation.
 
-> **Current source-audit boundary (July 25, 2026):** the present repository
-> passed its offline `Test-Lab.ps1 -Json` suite. A separate new read-only
-> Advanced Hunting attempt returned `Account mode is inactive` before executing
-> the synthetic query. It therefore produced no fresh live result. All live
-> deployment, telemetry, scheduler, alert, and retirement evidence below remains
-> tied to its stated July 11–14 date.
+> **Current source-audit boundary (November 13, 2026), offline checks only:**
+> the present repository passed its offline `Test-Lab.ps1 -Json` suite with
+> Bicep CLI `v0.45.6`. The network-hunt syntax step, which needs a downloaded
+> Kusto language package, was not run locally; CI runs it on every pull
+> request. The Graph fallback's `Apply` mode now targets the generally
+> available Microsoft Graph v1.0 endpoint, and read-only `Inspect` stays on
+> beta; that source change has not been run against any tenant. No Microsoft
+> Graph request, rule deployment, scheduler run, endpoint telemetry run, alert,
+> or cleanup is claimed by this audit. The latest live attempt remains the
+> July 25, 2026 read-only Advanced Hunting attempt, which returned
+> `Account mode is inactive` before executing the synthetic query and therefore
+> produced no fresh live result. All live deployment, telemetry, scheduler,
+> alert, and retirement evidence below remains tied to its stated July 11–14
+> date. The repository's Graph scripts called only the beta endpoint until
+> November 13, 2026, so every Graph fallback, inspection, and retirement run
+> below used beta.
 
 > **Post-audit hardening:** NLS-GW-001 now deduplicates only after a valid
 > process/registry time correlation, and NLS-GW-005 now evaluates an optimized
@@ -42,8 +52,10 @@ This file separates observed evidence from planned or synthetic validation.
 
 | Claim | Evidence | Status | Date |
 |---|---|---|---|
-| Current repository source audit | Local `./scripts/Test-Lab.ps1 -Json` against the current tree | Passed offline: six compiled marker-owned rules and unique IDs; ten exact-query fixture contracts; pinned endpoint image, Az modules, and manifest lifecycle controls; non-mutating direct validation; Graph collision/action guards; safe telemetry ownership and cleanup controls; pinned Linux CI runner, actions, and Bicep CLI | 2026-07-25 |
-| Fresh live synthetic API refresh | `./scripts/Invoke-SyntheticKqlTests.ps1` using the active read-only API path | Not executed by Defender: the API returned `Account mode is inactive` before query execution. This is not recorded as a new pass or as a KQL failure; the July 12 live synthetic result remains the latest completed run. | 2026-07-25 |
+| Current repository source audit | Local `./scripts/Test-Lab.ps1 -Json` against the current tree with Bicep CLI `v0.45.6` | Passed offline (offline checks only): the July 25 controls below, plus the Graph fallback's own Bicep-to-Graph conversion over all six rules with every create body held to the property paths documented for the Microsoft Graph v1.0 Create method, four rejection cases for beta-only, deprecated, and Bicep-only paths, and contracts that confine `Apply` to the v1.0 endpoint, limit Update bodies to the documented fields, and keep beta to read-only `Inspect`. `Test-NetworkHuntSyntax.ps1` was not run locally. | 2026-11-13 |
+| Graph fallback `Apply` on the v1.0 endpoint | Source change checked against the Microsoft Graph v1.0 Get, Create, and Update reference; Microsoft Graph What's new lists v1.0 custom detection rules under October 2026, new and generally available | Pending: not tenant-tested. No v1.0 request has been sent to any tenant; `Inspect` still reads `lastRunDetails` and `schedule.nextRunDateTime` from beta because v1.0 does not publish them. Run `Canary` first on the next `Apply`. | 2026-11-13 |
+| Latest live synthetic API attempt | `./scripts/Invoke-SyntheticKqlTests.ps1` using the active read-only API path | Not executed by Defender: the API returned `Account mode is inactive` before query execution. This is not recorded as a new pass or as a KQL failure; the July 12 live synthetic result remains the latest completed run. | 2026-07-25 |
+| Previous repository source audit | Local `./scripts/Test-Lab.ps1 -Json` against the then-current tree | Passed offline: six compiled marker-owned rules and unique IDs; ten exact-query fixture contracts; pinned endpoint image, Az modules, and manifest lifecycle controls; non-mutating direct validation; Graph collision/action guards; safe telemetry ownership and cleanup controls; pinned Linux CI runner, actions, and Bicep CLI | 2026-07-25 |
 | Six templates compile with Bicep | Local `az bicep build --stdout` | Passed | 2026-07-11 |
 | Pull-request validation | GitHub Actions draft PR #1 | Passed: six detections, endpoint Bicep, stable IDs, five fixtures, and nine safety boundaries | 2026-07-11 |
 | Live provider validation rejected a GUID-form ID beginning with a digit | Live direct-Bicep canary deployment returned `Invalid rule identifier` | Observed | 2026-07-11 |
@@ -55,14 +67,14 @@ This file separates observed evidence from planned or synthetic validation.
 | Repository identity authorization | Token-safe diagnostic using the connection identity | Passed: app-only token contained `CustomDetection.ReadWrite.All`, exact Graph GET returned 200, and Azure deployment rights were present | 2026-07-11 |
 | Native/Graph path comparison | Same connection identity, same rule ID | Native validation returned the recorded internal error; the same identity completed an exact Graph GET; no additional app-only role was identified in the referenced documentation | 2026-07-11 |
 | Additional-role diagnostic | Temporary Azure Security Admin at the exact resource-group scope | Did not change the result after a fresh login and full propagation interval; assignment removed | 2026-07-11 |
-| Graph fallback canary | Manual workflow run `29180371449` | Passed: exact canary ID updated/read back, disabled, with zero response actions | 2026-07-12 |
-| Graph fallback full pack | Manual workflow run `29180593038` | Passed: all six exact IDs updated/read back; canary disabled, five behavior rules enabled, and zero response actions on every rule | 2026-07-12 |
-| Graph fallback scheduler inspection | Read-only workflow runs `29193356536` and `29193929962` | Observed: the post-telemetry recheck showed all five enabled rules at frequency `PT1H`, with `lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime` `2026-07-12T14:09:25.6533333Z`; last-run status and error fields were empty, the disabled canary remained disabled, and all rules had zero current `automatedActions` plus zero deprecated `responseActions` | 2026-07-12 |
+| Graph fallback canary | Manual workflow run `29180371449` through the Graph beta endpoint | Passed: exact canary ID updated/read back, disabled, with zero response actions | 2026-07-12 |
+| Graph fallback full pack | Manual workflow run `29180593038` through the Graph beta endpoint | Passed: all six exact IDs updated/read back; canary disabled, five behavior rules enabled, and zero response actions on every rule | 2026-07-12 |
+| Graph fallback scheduler inspection | Read-only workflow runs `29193356536` and `29193929962` through the Graph beta endpoint | Observed: the post-telemetry recheck showed all five enabled rules at frequency `PT1H`, with `lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime` `2026-07-12T14:09:25.6533333Z`; last-run status and error fields were empty, the disabled canary remained disabled, and all rules had zero current `automatedActions` plus zero deprecated `responseActions` | 2026-07-12 |
 | Dedicated Graph fallback identity | Entra app-role and Azure RBAC audits plus GitHub OIDC configuration | Passed: only Graph application permission `CustomDetection.ReadWrite.All`, environment-scoped federated OIDC, no stored client secret, and zero Azure role assignments | 2026-07-12 |
 | Deployment-path sequencing | GitHub Actions run order and completion timestamps | Passed: canary run `29180371449` completed, native retry `29180501340` then completed in `Failed`, and full-pack run `29180593038` began afterward; native and fallback paths were never concurrent | 2026-07-12 |
 | Post-audit writer serialization | Local workflow contracts plus PR validation run `29275395872` at commit `0326383` | Passed at the published PR head: both deployment workflows are manual and confirmation-gated, share the exact `nls-gigawiper-custom-detection-writer` concurrency group with `cancel-in-progress: false`, and therefore cannot execute their writer jobs concurrently | 2026-07-13 |
 | Public-release active-writer posture | Repository layout plus local `Test-Lab.ps1` workflow contracts | Passed: the tenant-specific generated native files are retained outside `.github/workflows` with non-reuse notices; no active native writer remains; the manual Graph fallback is the only active custom-detection writer | 2026-07-13 |
-| Graph-fallback rule retirement | Exact-ID retirement workflow runs `29368829996` and `29368996155` | Scoped result passed: the initial run preflighted all six fallback identities and received `204` for each exact delete; the follow-up run independently returned `404` for all six exact IDs. Both overall workflows failed closed because LIVE-rule GET results persisted. | 2026-07-14 |
+| Graph-fallback rule retirement | Exact-ID retirement workflow runs `29368829996` and `29368996155` through the Graph beta endpoint | Scoped result passed: the initial run preflighted all six fallback identities and received `204` for each exact delete; the follow-up run independently returned `404` for all six exact IDs. Both overall workflows failed closed because LIVE-rule GET results persisted. | 2026-07-14 |
 | Portal-native deletion/convergence | Exact Graph requests, exact Defender detail-page deletion confirmations, direct portal-service read-back, a hard-refreshed rule-list search, and exact MDE alert reads | Passed after contradictory intermediate states: Graph returned `204` while the same three rows remained visible, and rule `153` still completed a scheduled run at `2026-07-14T21:53:08Z`. A Disable attempt and the final Delete confirmation produced client-error dialogs, so neither was treated as proof. Direct portal-service reads then returned `404` for rules `153`, `152`, and `151` at `22:00:33Z`, `22:01:39Z`, and `22:01:52Z`; an exact `NLS-GW` search returned **0 items** / **No data available** at `22:02:39Z`. Exact MDE API reads still returned all three historical custom alerts in incident `628`. No cause is assigned to the delayed or contradictory responses. | 2026-07-14 |
 | Fallback identity retirement | Exact Entra app/service-principal audit, Azure role audit, and GitHub environment read-back | Passed after fallback-rule read-back: app and service principal absent; federated credential and `CustomDetection.ReadWrite.All` grant removed with the app; zero Azure RBAC remained; environment retained with zero variables and zero secrets | 2026-07-14 |
 | Deployment ownership | Native failure state plus exact-ID Graph read-back | Observed: the six validation-time rules were created or updated by the Graph fallback; the failed Repository connection does not own them | 2026-07-12 |
@@ -139,8 +151,12 @@ Repository run and tracking IDs for Microsoft Support.
 The bounded fallback uses a separate Graph-only application with no Azure role
 assignments. Its workflow is manual, restricted to `main`, compiles the same
 Bicep source, creates or updates only the six stable IDs, performs no deletion,
-and verifies each rule by exact ID. During validation, the hardened native and
-Graph revisions shared a GitHub concurrency group and did not run concurrently.
+and verifies each rule by exact ID. In July 2026 it called the Microsoft Graph
+beta endpoint. Since the November 13, 2026 source change, `Apply` targets the
+generally available v1.0 endpoint and read-only `Inspect` remains on beta; that
+change was checked offline only and has not been run against a tenant. During
+validation, the hardened native and Graph revisions shared a GitHub concurrency
+group and did not run concurrently.
 For public release, the connection-specific native files are retained outside
 the active workflow directory, leaving the Graph fallback as the only active
 writer. It retains the stable concurrency name so a new connection-generated
@@ -148,17 +164,18 @@ native workflow can be deliberately hardened to share it before an ownership
 transition. Serialization prevents overlapping writers; it does not choose an
 owner or make a queued ownership transition safe by itself.
 
-Canary workflow run `29180371449` succeeded first. Full-pack workflow run
-`29180593038` then updated and read back all six exact IDs: the canary remained
+Canary workflow run `29180371449`, through the Graph beta endpoint, succeeded
+first. Full-pack workflow run `29180593038`, also through beta, then updated
+and read back all six exact IDs: the canary remained
 disabled, all five behavior rules were enabled, and every rule had zero response
 actions. The dedicated identity used only the Microsoft Graph application
 permission `CustomDetection.ReadWrite.All` through environment-scoped GitHub
 OIDC and had zero Azure RBAC assignments. Because the Repository path failed,
 it does not own these Graph-created or Graph-updated rules.
 
-Read-only inspection workflow run `29193356536` later retrieved all six
-validation-time Graph objects without changing them. Post-telemetry recheck run
-`29193929962`
+Read-only beta-endpoint inspection workflow run `29193356536` later retrieved
+all six validation-time Graph objects without changing them. Post-telemetry
+recheck run `29193929962`
 showed the five enabled behavior rules at frequency `PT1H`, with
 `lastRunDateTime` `2026-07-12T13:09:25.6533333Z` and `nextRunDateTime`
 `2026-07-12T14:09:25.6533333Z`; the disabled canary remained disabled. The

@@ -2,8 +2,15 @@
 
 Use this path only when native Sentinel Repository synchronization fails in the
 Microsoft Security provider after the documented prerequisites and permissions
-have been verified. It is a tenant-scoped Microsoft Graph beta workaround, not
-a replacement for Sentinel Repositories.
+have been verified. It is a tenant-scoped Microsoft Graph workaround, not a
+replacement for Sentinel Repositories.
+
+Since the November 13, 2026 source change, `Apply` targets the generally
+available Microsoft Graph v1.0 endpoint and read-only `Inspect` uses beta, the
+only version that publishes `lastRunDetails` and `schedule.nextRunDateTime`.
+The v1.0 write path was checked offline only, against Microsoft's v1.0
+reference and by the repository's offline suite; it has not been run against a
+tenant. The July 2026 validation runs used beta for both modes.
 
 ## Security model
 
@@ -24,7 +31,7 @@ automated response actions, not just edit query text. Zero Azure RBAC and this
 repository's zero-action checks do not narrow the app's Graph authorization.
 Protect the federation, source workflow and environment as privileged assets.
 The historical validation used zero response actions; that observation is not
-a permission boundary. See the [Graph automated-action model](https://learn.microsoft.com/en-us/graph/api/resources/security-automatedactionset?view=graph-rest-beta).
+a permission boundary. See the [Graph automated-action model](https://learn.microsoft.com/en-us/graph/api/resources/security-automatedactionset?view=graph-rest-1.0).
 
 Create one federated identity credential on the application:
 
@@ -77,7 +84,9 @@ reviewed and hardened before use.
 2. Run **Deploy custom detections - preview fallback** from `main`.
 3. Select `Canary` and type `DEPLOY_PREVIEW_FALLBACK`.
 4. Confirm `nls-gw-000-canary` is read back as `disabled` with zero response
-   actions.
+   actions. The first `Apply` after the November 13, 2026 move to v1.0 is the
+   first time this writer's requests reach that endpoint, so do not skip the
+   canary.
 5. Run the workflow again with `All`.
 6. Retain the step-summary table as evidence.
 7. Disable this fallback before authorizing a fresh native workflow, and keep it
@@ -105,8 +114,10 @@ authorized exact-ID rule cleanup that depends on it.
 
 ## References
 
-- [Create detectionRule](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-post-detectionrules?view=graph-rest-beta)
-- [Update detectionRule](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-update?view=graph-rest-beta)
-- [Get detectionRule](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-get?view=graph-rest-beta)
+- [Create detectionRule (v1.0, used by `Apply`)](https://learn.microsoft.com/en-us/graph/api/security-rulesroot-post-detectionrules?view=graph-rest-1.0)
+- [Update detectionRule (v1.0, used by `Apply`)](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-update?view=graph-rest-1.0)
+- [Get detectionRule (v1.0, used by `Apply`)](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-get?view=graph-rest-1.0)
+- [Get detectionRule (beta, used by `Inspect`)](https://learn.microsoft.com/en-us/graph/api/security-detectionrule-get?view=graph-rest-beta)
+- [What's new in Microsoft Graph](https://learn.microsoft.com/en-us/graph/whats-new-overview)
 - [CustomDetection.ReadWrite.All](https://learn.microsoft.com/en-us/graph/permissions-reference#customdetectionreadwriteall)
 - [GitHub OIDC with Azure](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure-openid-connect)
